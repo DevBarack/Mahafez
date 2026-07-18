@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اختبار الاستقبال</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  body{font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;background:#0d1b18;color:#eaf3f0;
+       padding:24px 16px;max-width:600px;margin:0 auto;line-height:1.7}
+  h1{font-size:1.3rem;margin-bottom:4px}
+  p{color:#8fa9a1;font-size:.85rem;margin-bottom:16px}
+  label{display:block;font-size:.78rem;color:#8fa9a1;margin:12px 0 5px}
+  input,textarea,button{width:100%;font-family:inherit;font-size:1rem;border-radius:12px;padding:12px;border:none}
+  input,textarea{background:#142b26;border:1px solid #22463f;color:#eaf3f0}
+  textarea{min-height:90px;resize:vertical;line-height:1.6}
+  button{background:#2fa98a;color:#04140f;font-weight:600;cursor:pointer;margin-top:14px}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .parsed{background:#142b26;border:1px solid #22463f;border-radius:12px;padding:12px;
+          margin-top:12px;font-size:.85rem}
+  .parsed b{color:#2fa98a}
+  pre{background:#142b26;border:1px solid #22463f;border-radius:12px;padding:12px;
+      font-size:.72rem;white-space:pre-wrap;color:#8fa9a1;margin-top:12px;max-height:220px;overflow:auto}
+  .ok{color:#2fa98a}.err{color:#d9645a}
+  .tag{display:inline-block;background:#1a3a33;border:1px solid #22463f;border-radius:8px;
+       padding:2px 8px;font-size:.7rem;margin:2px 4px 2px 0;cursor:pointer;color:#8fa9a1}
+</style>
+</head>
+<body>
+<h1>اختبار الاستقبال</h1>
+<p>يحاكي بالضبط اللي يسويه الشورت كت: يستخرج المبلغ والمتجر من رسالة الإنماء،
+ويكتبها في Firestore. لو نجح هنا، الشورت كت بينجح.</p>
+
+<label>كلمة المرور</label>
+<input id="pw" type="password" placeholder="نفس كلمة مرور التطبيق">
+
+<label>الصق رسالة إنماء (أو جرّب عيّنة)</label>
+<div>
+  <span class="tag" data-s="نقاط بيع">عيّنة: نقاط بيع</span>
+  <span class="tag" data-s="إنترنت">عيّنة: إنترنت</span>
+  <span class="tag" data-s="فيزا">عيّنة: فيزا</span>
+</div>
+<textarea id="sms" placeholder="شراء عبر نقاط بيع SAR 324 ..."></textarea>
+
+<div class="parsed" id="parsed" hidden></div>
+
+<button id="send">استخرج وأرسل لـ Firestore</button>
+<pre id="log">جاهز…</pre>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig, AUTH_EMAIL } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app), db = getFirestore(app);
+const $ = id => document.getElementById(id);
+const log = m => { $("log").textContent += "\n" + m; $("log").scrollTop = 1e9; };
+
+const SAMPLES = {
+  "نقاط بيع":"شراء عبر نقاط بيع SAR 324\nبطاقة 5902* مدى-ApplePay\nمن MYSR(q-Burj Al Hamam\nفي 17-07-26 19:06",
+  "إنترنت":"شراء إنترنت\nمبلغ SAR 63.35\nبطاقة 5902* مدى-ApplePay\nحساب *8000\nمن Tech advanced for IT\nفي 17-07-26 11:34",
+  "فيزا":"شراء POS - Apple Pay SAR 34.40\nبطاقة ائتمانية *7497\nمن HAMAD M ALRUGAIB AND SONS - SA\nفي 17-07-26 20:46",
+};
+document.querySelectorAll(".tag").forEach(t => t.onclick = () => { $("sms").value = SAMPLES[t.dataset.s]; parse(); });
+
+// نفس الـ regex اللي في الشورت كت
+function parse() {
+  const txt = $("sms").value;
+  const amt = (txt.match(/SAR\s*([\d,]+(?:\.\d{1,2})?)/) || [])[1];
+  const merch = (txt.match(/من\s+(?!حساب)([^\n]+?)(?:\s+في|\s+-\s+SA|$)/) || [])[1];
+  const card4 = (txt.match(/بطاقة[^\d]*(\d{4})/) || [])[1];
+  const card = card4 === "7497" ? "visa" : card4 ? "mada" : "";
+  const p = $("parsed");
+  if (amt || merch) {
+    p.hidden = false;
+    p.innerHTML = `المبلغ: <b>${amt || "—"}</b> · المتجر: <b>${merch || "—"}</b> · البطاقة: <b>${card || "—"}</b>`;
+  } else p.hidden = true;
+  return { amount: parseFloat((amt || "0").replace(/,/g, "")), merchant: (merch || "").trim(), card };
+}
+$("sms").addEventListener("input", parse);
+
+$("send").onclick = async () => {
+  try {
+    const pw = $("pw").value.trim();
+    if (!pw) return log("✗ اكتب كلمة المرور");
+    const { amount, merchant, card } = parse();
+    if (!amount || !merchant) return log("✗ ما قدرت أستخرج المبلغ/المتجر — راجع النص");
+
+    log("… تسجيل دخول");
+    await signInWithEmailAndPassword(auth, AUTH_EMAIL, pw);
+    log("✓ دخول ناجح");
+
+    log("… كتابة العملية في Firestore");
+    const ref = await addDoc(collection(db, "transactions"), {
+      amount, merchant, card, status: "pending", source: "test",
+      raw: $("sms").value, createdAt: serverTimestamp()
+    });
+    log("✓ تمت الكتابة (id: " + ref.id + ")");
+    log("\n🎉 نجح! افتح التطبيق — بتلقى العملية في «تحتاج مراجعة» (أو تصنّفت تلقائياً لو المتجر معروف).");
+  } catch (e) {
+    log("✗ " + (e.code || "") + " " + e.message);
+  }
+};
+</script>
+</body>
+</html>

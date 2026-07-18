@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1f1c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>محافظي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1b18; --surface:#142b26; --surface2:#1a3a33; --line:#22463f;
+    --ink:#eaf3f0; --muted:#8fa9a1; --dim:#5e7a72;
+    --teal:#2fa98a; --gold:#d4af37; --red:#d9645a; --blue:#7aa6d4;
+    --r:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{
+    font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.6;
+    padding:16px 14px calc(90px + env(safe-area-inset-bottom));
+    max-width:760px;margin:0 auto;font-size:15px;
+  }
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* ── Login ── */
+  #login{min-height:80vh;display:flex;flex-direction:column;justify-content:center;gap:14px}
+  #login h1{font-size:1.6rem;font-weight:600;text-align:center}
+  #login p{color:var(--muted);text-align:center;font-size:.85rem;margin-bottom:8px}
+  input,select{
+    width:100%;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;color:var(--ink);padding:13px;font-size:1rem;
+    font-family:inherit;
+  }
+  input:focus,select:focus{outline:2px solid var(--teal);outline-offset:1px}
+  button{
+    font-family:inherit;font-size:.95rem;font-weight:600;cursor:pointer;
+    border:none;border-radius:12px;padding:13px;
+  }
+  .primary{background:var(--teal);color:#04140f;width:100%}
+  .primary:active{opacity:.8}
+  .err{color:var(--red);font-size:.85rem;text-align:center;min-height:20px}
+
+  /* ── Header ── */
+  header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+  header h1{font-size:1.25rem;font-weight:600;letter-spacing:-.01em}
+  header .date{font-size:.75rem;color:var(--dim)}
+
+  /* ── Summary strip ── */
+  .strip{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;
+    background:var(--line);border:1px solid var(--line);
+    border-radius:var(--r);overflow:hidden;margin-bottom:18px;
+  }
+  .strip div{background:var(--surface);padding:12px 8px;text-align:center}
+  .strip .k{font-size:.68rem;color:var(--muted);display:block;margin-bottom:3px}
+  .strip .v{font-size:1.15rem;font-weight:600}
+
+  /* ── Section title ── */
+  h2{
+    font-size:.78rem;font-weight:600;color:var(--gold);letter-spacing:.04em;
+    margin:22px 0 10px;display:flex;align-items:center;gap:8px;
+  }
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .count{
+    background:var(--red);color:#fff;border-radius:99px;
+    padding:1px 8px;font-size:.7rem;font-weight:700;
+  }
+
+  /* ── Review inbox ── */
+  .review{
+    background:linear-gradient(180deg,rgba(217,100,90,.09),transparent);
+    border:1px solid var(--red);border-radius:var(--r);
+    padding:13px;margin-bottom:10px;
+  }
+  .review .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .review .merchant{font-weight:600;font-size:.98rem;word-break:break-word}
+  .review .amt{font-size:1.15rem;font-weight:700;color:var(--gold);white-space:nowrap}
+  .review .meta{font-size:.7rem;color:var(--dim);margin:2px 0 10px}
+  .review .row{display:flex;gap:8px}
+  .review select{flex:1}
+  .review button{background:var(--teal);color:#04140f;padding:13px 18px}
+
+  /* ── Wallet envelope ── */
+  .env{
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r);padding:13px 14px;margin-bottom:9px;
+    position:relative;overflow:hidden;
+  }
+  .env .fill{
+    position:absolute;inset-block:0;inset-inline-start:0;
+    background:currentColor;opacity:.10;transition:inline-size .5s ease;
+  }
+  .env > *{position:relative}
+  .env .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .env .name{font-weight:500;font-size:.95rem}
+  .env .bal{font-size:1.2rem;font-weight:700;white-space:nowrap}
+  .env .sub{
+    display:flex;justify-content:space-between;
+    font-size:.7rem;color:var(--dim);margin-top:2px;
+  }
+  .env.over .bal{color:var(--red)}
+  .env.low .bal{color:var(--gold)}
+
+  /* ── Transactions ── */
+  .tx{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:11px 4px;border-bottom:1px solid var(--line);font-size:.88rem;
+  }
+  .tx:last-child{border:none}
+  .tx .l .m{font-weight:500}
+  .tx .l .w{font-size:.7rem;color:var(--dim)}
+  .tx .r{text-align:end;white-space:nowrap}
+  .tx .r .a{font-weight:600}
+  .tx .r .d{font-size:.68rem;color:var(--dim)}
+  .tx .undo{
+    background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:8px;padding:5px 9px;font-size:.7rem;
+  }
+
+  /* ── Report bars ── */
+  .rep{margin-bottom:11px}
+  .rep .l{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px}
+  .rep .bar{height:7px;background:#0a1512;border-radius:99px;overflow:hidden}
+  .rep .bar div{height:100%;border-radius:99px}
+
+  /* ── Nav ── */
+  nav{
+    position:fixed;inset-inline:0;inset-block-end:0;
+    background:rgba(13,27,24,.94);backdrop-filter:blur(12px);
+    border-block-start:1px solid var(--line);
+    display:flex;padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    gap:6px;max-width:760px;margin:0 auto;
+  }
+  nav button{
+    flex:1;background:transparent;color:var(--dim);padding:9px 4px;
+    font-size:.72rem;font-weight:500;display:flex;flex-direction:column;
+    align-items:center;gap:3px;border-radius:10px;
+  }
+  nav button .i{font-size:1.15rem;line-height:1}
+  nav button.on{color:var(--teal);background:var(--surface)}
+
+  .page{display:none}
+  .page.on{display:block;animation:in .25s ease}
+  @keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  .empty{text-align:center;color:var(--dim);padding:30px 16px;font-size:.85rem}
+  .note{
+    background:var(--surface2);border:1px solid var(--line);border-radius:12px;
+    padding:11px 13px;font-size:.78rem;color:var(--muted);margin-bottom:12px;
+  }
+  .ghost{
+    background:transparent;border:1px solid var(--line);color:var(--muted);width:100%;
+  }
+  .danger{background:transparent;border:1px solid var(--red);color:var(--red);width:100%}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:5px}
+  .loading{text-align:center;color:var(--dim);padding:40px;font-size:.85rem}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOGIN ═══ -->
+<section id="login" hidden>
+  <h1>محافظي</h1>
+  <p>سجّل الدخول عشان تشوف محافظك</p>
+  <input id="pw" type="password" placeholder="كلمة المرور" autocomplete="current-password">
+  <button class="primary" id="loginBtn">دخول</button>
+  <div class="err" id="loginErr"></div>
+</section>
+
+<!-- ═══ APP ═══ -->
+<main id="app" hidden>
+  <header>
+    <h1>محافظي</h1>
+    <span class="date num" id="today"></span>
+  </header>
+
+  <div class="strip">
+    <div><span class="k">المتبقي</span><span class="v num" id="sTotal">—</span></div>
+    <div><span class="k">صُرف هذا الشهر</span><span class="v num" id="sSpent">—</span></div>
+    <div><span class="k">عمليات</span><span class="v num" id="sCount">—</span></div>
+  </div>
+
+  <!-- الرئيسية -->
+  <section class="page on" id="p-home">
+    <div id="reviewWrap" hidden>
+      <h2>تحتاج مراجعة <span class="count" id="revCount">0</span></h2>
+      <div id="reviewList"></div>
+    </div>
+    <h2>المحافظ</h2>
+    <div id="wallets"><div class="loading">جاري التحميل…</div></div>
+  </section>
+
+  <!-- العمليات -->
+  <section class="page" id="p-tx">
+    <h2>آخر العمليات</h2>
+    <div id="txList"></div>
+  </section>
+
+  <!-- التقرير -->
+  <section class="page" id="p-rep">
+    <h2>الصرف حسب المحفظة</h2>
+    <div id="report"></div>
+  </section>
+
+  <!-- إضافة -->
+  <section class="page" id="p-add">
+    <h2>إضافة عملية</h2>
+    <div class="field"><label>المبلغ</label><input id="aAmt" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></div>
+    <div class="field"><label>المتجر</label><input id="aMerch" type="text" placeholder="اسم المتجر"></div>
+    <div class="field"><label>المحفظة</label><select id="aWallet"></select></div>
+    <button class="primary" id="addBtn">سجّل العملية</button>
+    <div class="err" id="addErr"></div>
+
+    <h2>الشهر الجديد</h2>
+    <div class="note">
+      يرجّع كل محفظة لمبلغها الشهري، ويصفّر عدّاد الصرف. سجل العمليات يبقى كما هو.
+    </div>
+    <button class="danger" id="refillBtn">تعبئة المحافظ للشهر الجديد</button>
+    <div style="height:14px"></div>
+    <button class="ghost" id="outBtn">خروج</button>
+  </section>
+
+  <nav>
+    <button class="on" data-p="home"><span class="i">🏠</span>الرئيسية</button>
+    <button data-p="tx"><span class="i">📋</span>العمليات</button>
+    <button data-p="rep"><span class="i">📊</span>التقرير</button>
+    <button data-p="add"><span class="i">➕</span>إضافة</button>
+  </nav>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  setPersistence, browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDocs, getDoc, setDoc, addDoc,
+  updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot,
+  serverTimestamp, increment, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig, AUTH_EMAIL } from "./firebase-config.js";
+
+const fb = initializeApp(firebaseConfig);
+const auth = getAuth(fb);
+const db = getFirestore(fb);
+const $ = id => document.getElementById(id);
+const money = n => (Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+
+let WALLETS = [], TX = [], unsub = [];
+
+// ═══ AUTH ═══
+setPersistence(auth, browserLocalPersistence);
+
+$("loginBtn").onclick = async () => {
+  $("loginErr").textContent = "";
+  const pw = $("pw").value.trim();
+  if (!pw) { $("loginErr").textContent = "اكتب كلمة المرور"; return; }
+  try {
+    await signInWithEmailAndPassword(auth, AUTH_EMAIL, pw);
+  } catch (e) {
+    $("loginErr").textContent = "كلمة المرور غير صحيحة";
+  }
+};
+$("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click(); });
+$("outBtn").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  unsub.forEach(u => u()); unsub = [];
+  if (user) {
+    $("login").hidden = true; $("app").hidden = false;
+    $("today").textContent = new Date().toLocaleDateString("ar-SA-u-ca-gregory", { day: "numeric", month: "long" });
+    listen();
+  } else {
+    $("app").hidden = true; $("login").hidden = false; $("pw").value = "";
+  }
+});
+
+// ═══ LIVE DATA ═══
+function listen() {
+  unsub.push(onSnapshot(query(collection(db, "wallets"), orderBy("order")), snap => {
+    WALLETS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderWallets(); renderReview(); fillPickers(); renderReport();
+  }));
+  unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(150)), snap => {
+    TX = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderReview(); renderTx(); renderReport(); renderStrip();
+    autoSort();
+  }));
+}
+
+// ═══ AUTO-SORT: match pending merchants against learned memory ═══
+async function autoSort() {
+  const pending = TX.filter(t => t.status === "pending");
+  for (const t of pending) {
+    const key = norm(t.merchant);
+    if (!key) continue;
+    const m = await getDoc(doc(db, "merchants", key));
+    if (m.exists()) await assign(t, m.data().wallet, false);
+  }
+}
+const norm = s => (s || "").toString().trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 90);
+
+// ═══ ASSIGN a transaction to a wallet (and deduct) ═══
+async function assign(tx, walletId, learn = true) {
+  const w = WALLETS.find(x => x.id === walletId);
+  if (!w) return;
+  await updateDoc(doc(db, "wallets", walletId), {
+    balance: increment(-tx.amount),
+    spent: increment(tx.amount)
+  });
+  await updateDoc(doc(db, "transactions", tx.id), {
+    wallet: walletId, walletName: w.name, status: "done"
+  });
+  if (learn && tx.merchant) {
+    await setDoc(doc(db, "merchants", norm(tx.merchant)), {
+      wallet: walletId, merchant: tx.merchant, updatedAt: serverTimestamp()
+    });
+  }
+}
+
+// ═══ UNDO ═══
+async function undo(tx) {
+  if (!tx.wallet) return;
+  await updateDoc(doc(db, "wallets", tx.wallet), {
+    balance: increment(tx.amount), spent: increment(-tx.amount)
+  });
+  await updateDoc(doc(db, "transactions", tx.id), { status: "pending", wallet: null, walletName: null });
+}
+
+// ═══ RENDER ═══
+function renderStrip() {
+  const total = WALLETS.reduce((s, w) => s + (w.balance || 0), 0);
+  const spent = WALLETS.reduce((s, w) => s + (w.spent || 0), 0);
+  $("sTotal").textContent = money(total);
+  $("sSpent").textContent = money(spent);
+  $("sCount").textContent = TX.filter(t => t.status === "done").length;
+}
+
+function renderWallets() {
+  const el = $("wallets");
+  if (!WALLETS.length) { el.innerHTML = `<div class="empty">ما فيه محافظ بعد — شغّل seed.html مرة وحدة</div>`; return; }
+  el.innerHTML = WALLETS.map(w => {
+    const bal = w.balance || 0, bud = w.budget || 1;
+    const pct = Math.max(0, Math.min(100, (bal / bud) * 100));
+    const cls = bal < 0 ? "over" : pct < 25 ? "low" : "";
+    const color = bal < 0 ? "var(--red)" : pct < 25 ? "var(--gold)" : "var(--teal)";
+    return `<div class="env ${cls}" style="color:${color}">
+      <div class="fill" style="inline-size:${pct}%"></div>
+      <div class="top">
+        <span class="name">${w.emoji || ""} ${w.name}</span>
+        <span class="bal num">${money(bal)}</span>
+      </div>
+      <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${money(w.spent || 0)}</span></div>
+    </div>`;
+  }).join("");
+  renderStrip();
+}
+
+function renderReview() {
+  const pend = TX.filter(t => t.status === "pending");
+  $("reviewWrap").hidden = !pend.length;
+  $("revCount").textContent = pend.length;
+  if (!pend.length) return;
+  $("reviewList").innerHTML = pend.map(t => `
+    <div class="review">
+      <div class="top">
+        <span class="merchant">${esc(t.merchant || "بدون اسم")}</span>
+        <span class="amt num">${money(t.amount)}</span>
+      </div>
+      <div class="meta num">${fmt(t.createdAt)}</div>
+      <div class="row">
+        <select id="sel-${t.id}">${WALLETS.map(w => `<option value="${w.id}">${w.emoji || ""} ${w.name}</option>`).join("")}</select>
+        <button data-assign="${t.id}">اخصم</button>
+      </div>
+    </div>`).join("");
+  $("reviewList").querySelectorAll("[data-assign]").forEach(b => {
+    b.onclick = async () => {
+      const id = b.dataset.assign;
+      const tx = TX.find(t => t.id === id);
+      b.disabled = true; b.textContent = "…";
+      await assign(tx, $("sel-" + id).value, true);
+    };
+  });
+}
+
+function renderTx() {
+  const done = TX.filter(t => t.status === "done");
+  $("txList").innerHTML = done.length ? done.map(t => `
+    <div class="tx">
+      <div class="l"><div class="m">${esc(t.merchant || "—")}</div><div class="w">${esc(t.walletName || "")}</div></div>
+      <div class="r"><div class="a num">${money(t.amount)}</div><div class="d num">${fmt(t.createdAt)}</div></div>
+      <button class="undo" data-undo="${t.id}">تراجع</button>
+    </div>`).join("") : `<div class="empty">ما فيه عمليات بعد</div>`;
+  $("txList").querySelectorAll("[data-undo]").forEach(b => {
+    b.onclick = () => undo(TX.find(t => t.id === b.dataset.undo));
+  });
+}
+
+function renderReport() {
+  const max = Math.max(...WALLETS.map(w => w.spent || 0), 1);
+  const sorted = [...WALLETS].sort((a, b) => (b.spent || 0) - (a.spent || 0)).filter(w => (w.spent || 0) > 0);
+  $("report").innerHTML = sorted.length ? sorted.map(w => {
+    const s = w.spent || 0, bud = w.budget || 1;
+    const over = s > bud;
+    return `<div class="rep">
+      <div class="l"><span>${w.emoji || ""} ${w.name}</span><span class="num" style="color:${over ? "var(--red)" : "var(--muted)"}">${money(s)} / ${money(bud)}</span></div>
+      <div class="bar"><div style="width:${Math.min(100, (s / max) * 100)}%;background:${over ? "var(--red)" : "var(--teal)"}"></div></div>
+    </div>`;
+  }).join("") : `<div class="empty">ما صرفت شي بعد هذا الشهر</div>`;
+}
+
+function fillPickers() {
+  $("aWallet").innerHTML = WALLETS.map(w => `<option value="${w.id}">${w.emoji || ""} ${w.name}</option>`).join("");
+}
+
+// ═══ ADD manual ═══
+$("addBtn").onclick = async () => {
+  $("addErr").textContent = "";
+  const amt = parseFloat($("aAmt").value);
+  const merch = $("aMerch").value.trim();
+  const wid = $("aWallet").value;
+  if (!amt || amt <= 0) { $("addErr").textContent = "اكتب مبلغ صحيح"; return; }
+  if (!wid) { $("addErr").textContent = "اختر محفظة"; return; }
+  const w = WALLETS.find(x => x.id === wid);
+  const ref = await addDoc(collection(db, "transactions"), {
+    amount: amt, merchant: merch || "يدوي", wallet: wid, walletName: w.name,
+    status: "done", source: "manual", createdAt: serverTimestamp()
+  });
+  await updateDoc(doc(db, "wallets", wid), { balance: increment(-amt), spent: increment(amt) });
+  if (merch) await setDoc(doc(db, "merchants", norm(merch)), { wallet: wid, merchant: merch, updatedAt: serverTimestamp() });
+  $("aAmt").value = ""; $("aMerch").value = "";
+  $("addErr").style.color = "var(--teal)"; $("addErr").textContent = "تسجّلت ✓";
+  setTimeout(() => { $("addErr").textContent = ""; $("addErr").style.color = "var(--red)"; }, 1600);
+};
+
+// ═══ REFILL monthly ═══
+$("refillBtn").onclick = async () => {
+  if (!confirm("تعبئة كل المحافظ لمبلغها الشهري وتصفير عدّاد الصرف؟")) return;
+  const b = writeBatch(db);
+  WALLETS.forEach(w => b.update(doc(db, "wallets", w.id), { balance: w.budget || 0, spent: 0 }));
+  await b.commit();
+  alert("تمت التعبئة ✓");
+};
+
+// ═══ NAV ═══
+document.querySelectorAll("nav button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll("nav button").forEach(x => x.classList.remove("on"));
+    document.querySelectorAll(".page").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    $("p-" + b.dataset.p).classList.add("on");
+    window.scrollTo(0, 0);
+  };
+});
+
+// ═══ helpers ═══
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function fmt(ts) {
+  if (!ts?.toDate) return "";
+  const d = ts.toDate();
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" }) + " · " +
+         d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+</script>
+</body>
+</html>
