@@ -1,0 +1,156 @@
+:root{
+  --bg:#0d1b18; --surface:#142b26; --surface2:#1a3a33; --line:#22463f;
+  --ink:#eaf3f0; --muted:#8fa9a1; --dim:#5e7a72;
+  --teal:#2fa98a; --gold:#d4af37; --red:#d9645a; --blue:#7aa6d4;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.6;
+  padding:16px 14px calc(90px + env(safe-area-inset-bottom));
+  max-width:760px;margin:0 auto;font-size:15px;
+}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+/* ── Login ── */
+#login{min-height:80vh;display:flex;flex-direction:column;justify-content:center;gap:14px}
+#login h1{font-size:1.6rem;font-weight:600;text-align:center}
+#login p{color:var(--muted);text-align:center;font-size:.85rem;margin-bottom:8px}
+input,select{
+  width:100%;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;color:var(--ink);padding:13px;font-size:1rem;
+  font-family:inherit;
+}
+input:focus,select:focus{outline:2px solid var(--teal);outline-offset:1px}
+button{
+  font-family:inherit;font-size:.95rem;font-weight:600;cursor:pointer;
+  border:none;border-radius:12px;padding:13px;
+}
+.primary{background:var(--teal);color:#04140f;width:100%}
+.primary:active{opacity:.8}
+.err{color:var(--red);font-size:.85rem;text-align:center;min-height:20px}
+
+/* ── Header ── */
+header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+header h1{font-size:1.25rem;font-weight:600;letter-spacing:-.01em}
+header .date{font-size:.75rem;color:var(--dim)}
+
+/* ── Summary strip ── */
+.strip{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;
+  background:var(--line);border:1px solid var(--line);
+  border-radius:var(--r);overflow:hidden;margin-bottom:18px;
+}
+.strip div{background:var(--surface);padding:12px 8px;text-align:center}
+.strip .k{font-size:.68rem;color:var(--muted);display:block;margin-bottom:3px}
+.strip .v{font-size:1.15rem;font-weight:600}
+
+/* ── Section title ── */
+h2{
+  font-size:.78rem;font-weight:600;color:var(--gold);letter-spacing:.04em;
+  margin:22px 0 10px;display:flex;align-items:center;gap:8px;
+}
+h2::after{content:"";flex:1;height:1px;background:var(--line)}
+.count{
+  background:var(--red);color:#fff;border-radius:99px;
+  padding:1px 8px;font-size:.7rem;font-weight:700;
+}
+
+/* ── Review inbox ── */
+.review{
+  background:linear-gradient(180deg,rgba(217,100,90,.09),transparent);
+  border:1px solid var(--red);border-radius:var(--r);
+  padding:13px;margin-bottom:10px;
+}
+.review .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.review .merchant{font-weight:600;font-size:.98rem;word-break:break-word}
+.review .amt{font-size:1.15rem;font-weight:700;color:var(--gold);white-space:nowrap}
+.review .meta{font-size:.7rem;color:var(--dim);margin:2px 0 10px}
+.review .row{display:flex;gap:8px}
+.review select{flex:1}
+.review button{background:var(--teal);color:#04140f;padding:13px 18px}
+
+/* ── Wallet envelope ── */
+.env{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:13px 14px;margin-bottom:9px;
+  position:relative;overflow:hidden;
+}
+.env .fill{
+  position:absolute;inset-block:0;inset-inline-start:0;
+  background:currentColor;opacity:.10;transition:inline-size .5s ease;
+}
+.env > *{position:relative}
+.env .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.env .name{font-weight:500;font-size:.95rem}
+.env .bal{font-size:1.2rem;font-weight:700;white-space:nowrap}
+.env .sub{
+  display:flex;justify-content:space-between;
+  font-size:.7rem;color:var(--dim);margin-top:2px;
+}
+.env.over .bal{color:var(--red)}
+.env.low .bal{color:var(--gold)}
+
+/* ── Transactions ── */
+.tx{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:11px 4px;border-bottom:1px solid var(--line);font-size:.88rem;
+}
+.tx:last-child{border:none}
+.tx .l .m{font-weight:500}
+.tx .l .w{font-size:.7rem;color:var(--dim)}
+.tx .r{text-align:end;white-space:nowrap}
+.tx .r .a{font-weight:600}
+.tx .r .d{font-size:.68rem;color:var(--dim)}
+.tx .undo{
+  background:transparent;border:1px solid var(--line);color:var(--muted);
+  border-radius:8px;padding:5px 9px;font-size:.7rem;
+}
+
+/* ── Report chart ── */
+.chart-card{
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:16px 14px;margin-bottom:6px;
+}
+
+/* ── Report bars ── */
+.rep{margin-bottom:11px}
+.rep .l{display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px}
+.rep .bar{height:7px;background:#0a1512;border-radius:99px;overflow:hidden}
+.rep .bar div{height:100%;border-radius:99px;transition:width .6s ease}
+
+/* ── Nav ── */
+nav{
+  position:fixed;inset-inline:0;inset-block-end:0;
+  background:rgba(13,27,24,.94);backdrop-filter:blur(12px);
+  border-block-start:1px solid var(--line);
+  display:flex;padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+  gap:6px;max-width:760px;margin:0 auto;
+}
+nav button{
+  flex:1;background:transparent;color:var(--dim);padding:9px 4px;
+  font-size:.72rem;font-weight:500;display:flex;flex-direction:column;
+  align-items:center;gap:3px;border-radius:10px;
+}
+nav button .i{font-size:1.15rem;line-height:1}
+nav button.on{color:var(--teal);background:var(--surface)}
+
+.page{display:none}
+.page.on{display:block;animation:in .25s ease}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.empty{text-align:center;color:var(--dim);padding:30px 16px;font-size:.85rem}
+.note{
+  background:var(--surface2);border:1px solid var(--line);border-radius:12px;
+  padding:11px 13px;font-size:.78rem;color:var(--muted);margin-bottom:12px;
+}
+.ghost{
+  background:transparent;border:1px solid var(--line);color:var(--muted);width:100%;
+}
+.danger{background:transparent;border:1px solid var(--red);color:var(--red);width:100%}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:5px}
+.loading{text-align:center;color:var(--dim);padding:40px;font-size:.85rem}
+[hidden]{display:none !important}
