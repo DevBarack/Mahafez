@@ -303,6 +303,7 @@ function listen() {
 function parseSMS(raw) {
   if (!raw) return null;
   const amtM = raw.match(/SAR\s*([\d,]+(?:\.\d{1,2})?)/) ||
+                raw.match(/([\d,]+(?:\.\d{1,2})?)\s*SAR/) ||
                raw.match(/مبلغ\s*([\d,]+(?:\.\d{1,2})?)/) ||
                raw.match(/بيع\s*([\d,]+(?:\.\d{1,2})?)/);
   const merM = raw.match(/من\s+(?!حساب)([^\n]+?)(?:\s+في|\s+-\s+SA|\n|$)/);
