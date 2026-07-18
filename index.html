@@ -187,6 +187,10 @@
 
   <!-- الرئيسية -->
   <section class="page on" id="p-home">
+    <div id="unparsedWrap" hidden>
+      <h2>ما قدر يقرأها — أضفها يدوي <span class="count" id="unpCount">0</span></h2>
+      <div id="unparsedList"></div>
+    </div>
     <div id="reviewWrap" hidden>
       <h2>تحتاج مراجعة <span class="count" id="revCount">0</span></h2>
       <div id="reviewList"></div>
@@ -289,13 +293,44 @@ function listen() {
   }));
   unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(150)), snap => {
     TX = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderReview(); renderTx(); renderReport(); renderStrip();
+    renderReview(); renderUnparsed(); renderTx(); renderReport(); renderStrip();
     autoSort();
   }));
 }
 
-// ═══ AUTO-SORT: match pending merchants against learned memory ═══
+// ═══ PARSE raw SMS text → amount + merchant + card ═══
+// الشورت كت يرسل النص الخام، والتطبيق يقسّمه هنا
+function parseSMS(raw) {
+  if (!raw) return null;
+  const amtM = raw.match(/SAR\s*([\d,]+(?:\.\d{1,2})?)/) ||
+               raw.match(/مبلغ\s*([\d,]+(?:\.\d{1,2})?)/) ||
+               raw.match(/بيع\s*([\d,]+(?:\.\d{1,2})?)/);
+  const merM = raw.match(/من\s+(?!حساب)([^\n]+?)(?:\s+في|\s+-\s+SA|\n|$)/);
+  const cardM = raw.match(/بطاقة[^\d]*(\d{4})/);
+  const amount = amtM ? parseFloat(amtM[1].replace(/,/g, "")) : null;
+  const merchant = merM ? merM[1].trim() : null;
+  const card = cardM ? (cardM[1] === "7497" ? "visa" : "mada") : "";
+  if (!amount || !merchant) return null;
+  return { amount, merchant, card };
+}
+
+// ═══ AUTO-SORT: parse raw texts, then match merchants against learned memory ═══
 async function autoSort() {
+  // ١) عمليات وصلت كنص خام من الشورت كت → قسّمها أول
+  const rawOnes = TX.filter(t => t.status === "raw");
+  for (const t of rawOnes) {
+    const parsed = parseSMS(t.raw);
+    if (parsed) {
+      await updateDoc(doc(db, "transactions", t.id), {
+        amount: parsed.amount, merchant: parsed.merchant,
+        card: parsed.card, status: "pending"
+      });
+    } else {
+      // ما قدر يقسّمها — علّمها عشان تراجعها يدوي
+      await updateDoc(doc(db, "transactions", t.id), { status: "unparsed" });
+    }
+  }
+  // ٢) عمليات جاهزة (فيها متجر) → صنّفها من الذاكرة
   const pending = TX.filter(t => t.status === "pending");
   for (const t of pending) {
     const key = norm(t.merchant);
@@ -385,6 +420,37 @@ function renderReview() {
       const tx = TX.find(t => t.id === id);
       b.disabled = true; b.textContent = "…";
       await assign(tx, $("sel-" + id).value, true);
+    };
+  });
+}
+
+// عمليات ما قدر التطبيق يقرأها من النص — أضفها يدوي
+function renderUnparsed() {
+  const unp = TX.filter(t => t.status === "unparsed");
+  $("unparsedWrap").hidden = !unp.length;
+  $("unpCount").textContent = unp.length;
+  if (!unp.length) return;
+  $("unparsedList").innerHTML = unp.map(t => `
+    <div class="review" style="border-color:var(--gold);background:linear-gradient(180deg,rgba(212,175,55,.09),transparent)">
+      <div style="font-size:.78rem;color:var(--muted);margin-bottom:8px">${esc((t.raw || "").slice(0, 140))}</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <input id="amt-${t.id}" type="number" inputmode="decimal" placeholder="المبلغ"
+          style="flex:1;min-width:90px;background:#0c1a17;border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:10px">
+        <select id="wsel-${t.id}" style="flex:2;min-width:120px">${WALLETS.map(w => `<option value="${w.id}">${w.emoji || ""} ${w.name}</option>`).join("")}</select>
+        <button data-manual="${t.id}">اخصم</button>
+      </div>
+    </div>`).join("");
+  $("unparsedList").querySelectorAll("[data-manual]").forEach(b => {
+    b.onclick = async () => {
+      const id = b.dataset.manual;
+      const tx = TX.find(t => t.id === id);
+      const amt = parseFloat($("amt-" + id).value);
+      if (!amt || amt <= 0) { $("amt-" + id).style.borderColor = "var(--red)"; return; }
+      b.disabled = true; b.textContent = "…";
+      // اكتب المبلغ ثم اخصم من المحفظة المختارة
+      await updateDoc(doc(db, "transactions", id), { amount: amt, merchant: tx.merchant || "يدوي", status: "pending" });
+      const fresh = { ...tx, amount: amt };
+      await assign(fresh, $("wsel-" + id).value, false);
     };
   });
 }
