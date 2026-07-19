@@ -39,6 +39,7 @@ onAuthStateChanged(auth, user => {
   if (user) {
     $("login").hidden = true; $("app").hidden = false;
     $("today").textContent = new Date().toLocaleDateString("ar-SA-u-ca-gregory", { day: "numeric", month: "long" });
+    loadSplit();
     listen();
   } else {
     $("app").hidden = true; $("login").hidden = false; $("pw").value = "";
@@ -140,21 +141,24 @@ function renderStrip() {
 
 function renderWallets() {
   const el = $("wallets");
-  if (!WALLETS.length) { el.innerHTML = `<div class="empty">ما فيه محافظ بعد — شغّل seed.html مرة وحدة</div>`; return; }
+  if (!WALLETS.length) { el.innerHTML = `<div class="empty">ما فيه محافظ بعد — أضف وحدة بالزر تحت</div>`; return; }
   el.innerHTML = WALLETS.map(w => {
     const bal = w.balance || 0, bud = w.budget || 1;
     const pct = Math.max(0, Math.min(100, (bal / bud) * 100));
     const cls = bal < 0 ? "over" : pct < 25 ? "low" : "";
     const color = bal < 0 ? "var(--red)" : pct < 25 ? "var(--gold)" : "var(--teal)";
-    return `<div class="env ${cls}" style="color:${color}">
+    return `<div class="env tap ${cls}" data-edit="${w.id}" style="color:${color}">
       <div class="fill" style="inline-size:${pct}%"></div>
       <div class="top">
-        <span class="name">${w.emoji || ""} ${w.name}</span>
+        <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
         <span class="bal num">${money(bal)}</span>
       </div>
       <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${money(w.spent || 0)}</span></div>
     </div>`;
   }).join("");
+  el.querySelectorAll("[data-edit]").forEach(c => {
+    c.onclick = () => openWalletModal(c.dataset.edit);
+  });
   renderStrip();
 }
 
@@ -222,11 +226,30 @@ function renderTx() {
     <div class="tx">
       <div class="l"><div class="m">${esc(t.merchant || "—")}</div><div class="w">${esc(t.walletName || "")}</div></div>
       <div class="r"><div class="a num">${money(t.amount)}</div><div class="d num">${fmt(t.createdAt)}</div></div>
-      <button class="undo" data-undo="${t.id}">تراجع</button>
+      <div class="acts">
+        <button class="undo" data-undo="${t.id}">تراجع</button>
+        <button class="del" data-del="${t.id}">حذف</button>
+      </div>
     </div>`).join("") : `<div class="empty">ما فيه عمليات بعد</div>`;
   $("txList").querySelectorAll("[data-undo]").forEach(b => {
     b.onclick = () => undo(TX.find(t => t.id === b.dataset.undo));
   });
+  $("txList").querySelectorAll("[data-del]").forEach(b => {
+    b.onclick = () => deleteTx(TX.find(t => t.id === b.dataset.del));
+  });
+}
+
+// ═══ حذف عملية نهائياً — يرجّع المبلغ للمحفظة إذا كانت مخصومة ═══
+async function deleteTx(tx) {
+  if (!tx) return;
+  if (!confirm(`حذف عملية "${tx.merchant || "—"}" بمبلغ ${money(tx.amount)}؟ المبلغ بيرجع للمحفظة.`)) return;
+  // إذا كانت مخصومة من محفظة → رجّع المبلغ
+  if (tx.status === "done" && tx.wallet) {
+    await updateDoc(doc(db, "wallets", tx.wallet), {
+      balance: increment(tx.amount), spent: increment(-tx.amount)
+    });
+  }
+  await deleteDoc(doc(db, "transactions", tx.id));
 }
 
 function renderReport() {
@@ -393,10 +416,209 @@ document.querySelectorAll("nav button").forEach(b => {
     b.classList.add("on");
     $("p-" + b.dataset.p).classList.add("on");
     window.scrollTo(0, 0);
-    // لمّا نفتح التقرير، تأكد الرسم مرسوم بمقاسه الصح
     if (b.dataset.p === "rep" && walletChart) walletChart.resize();
+    if (b.dataset.p === "split") renderSplit();
   };
 });
+
+// ═══════════════════════════════════════════
+// ═══ الخاصية ١: تعديل / إضافة / حذف محفظة ═══
+// ═══════════════════════════════════════════
+let editingWalletId = null;
+
+function openWalletModal(walletId) {
+  editingWalletId = walletId; // null = محفظة جديدة
+  const w = walletId ? WALLETS.find(x => x.id === walletId) : null;
+  $("modalTitle").textContent = w ? "تعديل المحفظة" : "محفظة جديدة";
+  $("mName").value = w ? w.name : "";
+  $("mEmoji").value = w ? (w.emoji || "") : "";
+  $("mBudget").value = w ? (w.budget || "") : "";
+  $("mErr").textContent = "";
+  $("mDeleteBtn").style.display = w ? "block" : "none"; // ما نعرض حذف لمحفظة جديدة
+  $("walletModal").hidden = false;
+}
+function closeWalletModal() { $("walletModal").hidden = true; editingWalletId = null; }
+
+$("addWalletBtn").onclick = () => openWalletModal(null);
+$("mCancelBtn").onclick = closeWalletModal;
+
+$("mSaveBtn").onclick = async () => {
+  const name = $("mName").value.trim();
+  const emoji = $("mEmoji").value.trim();
+  const budget = parseFloat($("mBudget").value);
+  if (!name) { $("mErr").textContent = "اكتب اسم المحفظة"; return; }
+  if (isNaN(budget) || budget < 0) { $("mErr").textContent = "اكتب مبلغ صحيح"; return; }
+  $("mSaveBtn").disabled = true; $("mSaveBtn").textContent = "…";
+  try {
+    if (editingWalletId) {
+      // تعديل: نحدّث الاسم/الرمز/الميزانية فقط (ما نلمس الرصيد الحالي)
+      await updateDoc(doc(db, "wallets", editingWalletId), { name, emoji, budget });
+    } else {
+      // إضافة: محفظة جديدة، رصيدها = ميزانيتها، صرفها 0
+      const order = WALLETS.length ? Math.max(...WALLETS.map(w => w.order || 0)) + 1 : 0;
+      await addDoc(collection(db, "wallets"), {
+        name, emoji, budget, balance: budget, spent: 0, order, pct: 0
+      });
+    }
+    closeWalletModal();
+  } catch (e) {
+    $("mErr").textContent = "صار خطأ، حاول مرة ثانية";
+  }
+  $("mSaveBtn").disabled = false; $("mSaveBtn").textContent = "حفظ";
+};
+
+$("mDeleteBtn").onclick = async () => {
+  if (!editingWalletId) return;
+  const w = WALLETS.find(x => x.id === editingWalletId);
+  if (!confirm(`حذف محفظة "${w?.name}"؟ هذا الإجراء نهائي.`)) return;
+  await deleteDoc(doc(db, "wallets", editingWalletId));
+  closeWalletModal();
+};
+
+// ═══════════════════════════════════════════
+// ═══ الخاصية ٢: توزيع الراتب بالنسب ═══
+// ═══════════════════════════════════════════
+// النِسب تُحفظ في settings/split ، مع آخر راتب
+let splitPct = {};   // { walletId: نسبة }
+let splitSalary = 0;
+let splitLoaded = false;
+
+async function loadSplit() {
+  const snap = await getDoc(doc(db, "settings", "split"));
+  if (snap.exists()) {
+    const d = snap.data();
+    splitPct = d.pct || {};
+    splitSalary = d.salary || 0;
+  }
+  splitLoaded = true;
+}
+
+function renderSplit() {
+  if (!WALLETS.length) { $("splitList").innerHTML = `<div class="empty">أضف محافظ أول</div>`; return; }
+
+  // لو ما فيه نسب محفوظة، وزّع بالتساوي كبداية
+  const ids = WALLETS.map(w => w.id);
+  let anyMissing = ids.some(id => splitPct[id] === undefined);
+  if (anyMissing || !Object.keys(splitPct).length) {
+    const even = Math.floor(100 / WALLETS.length);
+    splitPct = {};
+    ids.forEach((id, i) => splitPct[id] = i === 0 ? 100 - even * (WALLETS.length - 1) : even);
+  }
+  // نظّف نسب محافظ محذوفة
+  Object.keys(splitPct).forEach(id => { if (!ids.includes(id)) delete splitPct[id]; });
+
+  if (splitSalary) $("salaryInput").value = splitSalary;
+
+  $("splitList").innerHTML = WALLETS.map(w => {
+    const pct = Math.round(splitPct[w.id] || 0);
+    return `<div class="split-row">
+      <div class="top">
+        <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
+        <span class="vals"><span class="pct" id="pct-${w.id}">${pct}%</span><span class="amt" id="amt-${w.id}">0</span></span>
+      </div>
+      <input type="range" min="0" max="100" value="${pct}" data-slider="${w.id}">
+    </div>`;
+  }).join("");
+
+  $("splitList").querySelectorAll("[data-slider]").forEach(s => {
+    s.oninput = () => onSliderMove(s.dataset.slider, parseInt(s.value));
+  });
+  recalcSplit();
+}
+
+// نمط (أ): المجموع مقفول على 100% — الفرق يوزّع بالتساوي على الباقي
+function onSliderMove(id, newVal) {
+  const others = WALLETS.map(w => w.id).filter(x => x !== id);
+  const oldVal = splitPct[id] || 0;
+  let diff = newVal - oldVal; // كم زاد (أو نقص) هذا الشريط
+  splitPct[id] = newVal;
+
+  // وزّع -diff على الباقي بالتساوي، مع منع السالب
+  let remaining = -diff;
+  // اجمع النسب الحالية للباقي
+  let pool = others.map(x => ({ id: x, v: splitPct[x] || 0 }));
+  const totalOthers = pool.reduce((s, o) => s + o.v, 0);
+
+  if (remaining > 0) {
+    // نحتاج نزيد الباقي (لأن هذا الشريط نقص) — بالتساوي
+    const add = remaining / others.length;
+    pool.forEach(o => splitPct[o.id] = o.v + add);
+  } else if (remaining < 0) {
+    // نحتاج ننقص من الباقي — بالتناسب عشان ما يصير سالب
+    const need = -remaining;
+    if (totalOthers <= 0) {
+      // الباقي كله صفر — ما نقدر ننقص، رجّع الشريط
+      splitPct[id] = oldVal;
+    } else {
+      pool.forEach(o => {
+        const share = (o.v / totalOthers) * need;
+        splitPct[o.id] = Math.max(0, o.v - share);
+      });
+    }
+  }
+  // تقريب وتصحيح عشان المجموع = 100 بالضبط
+  normalizeSplitTo100(id);
+  // حدّث الواجهة
+  WALLETS.forEach(w => {
+    const p = Math.round(splitPct[w.id] || 0);
+    const pctEl = $("pct-" + w.id), sl = document.querySelector(`[data-slider="${w.id}"]`);
+    if (pctEl) pctEl.textContent = p + "%";
+    if (sl && sl.dataset.slider !== id) sl.value = p; // ما نحرّك اللي بيده المستخدم
+  });
+  recalcSplit();
+}
+
+function normalizeSplitTo100(lockedId) {
+  let sum = WALLETS.reduce((s, w) => s + (splitPct[w.id] || 0), 0);
+  const drift = 100 - sum;
+  if (Math.abs(drift) < 0.001) return;
+  // أضف الفرق البسيط لأول محفظة غير مقفولة
+  const target = WALLETS.find(w => w.id !== lockedId && (splitPct[w.id] || 0) + drift >= 0);
+  if (target) splitPct[target.id] = (splitPct[target.id] || 0) + drift;
+  else if (WALLETS[0]) splitPct[WALLETS[0].id] = (splitPct[WALLETS[0].id] || 0) + drift;
+}
+
+function recalcSplit() {
+  const salary = parseFloat($("salaryInput").value) || 0;
+  let allocated = 0;
+  WALLETS.forEach(w => {
+    const amt = (salary * (splitPct[w.id] || 0)) / 100;
+    allocated += amt;
+    const el = $("amt-" + w.id);
+    if (el) el.textContent = money(amt);
+  });
+  const remain = salary - allocated;
+  $("splitAllocated").textContent = money(allocated);
+  $("splitRemain").textContent = money(remain);
+  const box = document.querySelector(".split-total");
+  if (box) { box.classList.toggle("ok", Math.abs(remain) < 1); box.classList.toggle("bad", Math.abs(remain) >= 1); }
+}
+
+$("salaryInput").addEventListener("input", recalcSplit);
+
+$("applySplitBtn").onclick = async () => {
+  const salary = parseFloat($("salaryInput").value);
+  if (!salary || salary <= 0) { $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب راتب صحيح"; return; }
+  $("applySplitBtn").disabled = true; $("applySplitBtn").textContent = "…";
+  try {
+    // حدّث ميزانية كل محفظة = نسبتها × الراتب
+    const batch = writeBatch(db);
+    WALLETS.forEach(w => {
+      const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
+      batch.update(doc(db, "wallets", w.id), { budget: newBudget, pct: splitPct[w.id] || 0 });
+    });
+    await batch.commit();
+    // احفظ النسب والراتب للشهر الجاي
+    splitSalary = salary;
+    await setDoc(doc(db, "settings", "split"), { pct: splitPct, salary, updatedAt: serverTimestamp() });
+    $("splitMsg").style.color = "var(--teal)";
+    $("splitMsg").textContent = "تم تطبيق التوزيع ✓ — استخدم \"تعبئة الشهر\" لتعبئة المحافظ بالمبالغ الجديدة";
+    setTimeout(() => { $("splitMsg").textContent = ""; }, 4000);
+  } catch (e) {
+    $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
+  }
+  $("applySplitBtn").disabled = false; $("applySplitBtn").textContent = "طبّق على المحافظ";
+};
 
 // ═══ helpers ═══
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }

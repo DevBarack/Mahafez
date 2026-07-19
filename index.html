@@ -5,18 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1f1c">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>محافظي</title>
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<!-- Chart.js — للرسوم البيانية -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-<!-- التصميم -->
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 
-<!-- ═══ LOGIN ═══ -->
+<!-- LOGIN -->
 <section id="login" hidden>
   <h1>محافظي</h1>
   <p>سجّل الدخول عشان تشوف محافظك</p>
@@ -25,7 +28,7 @@
   <div class="err" id="loginErr"></div>
 </section>
 
-<!-- ═══ APP ═══ -->
+<!-- APP -->
 <main id="app" hidden>
   <header>
     <h1>محافظي</h1>
@@ -48,8 +51,9 @@
       <h2>تحتاج مراجعة <span class="count" id="revCount">0</span></h2>
       <div id="reviewList"></div>
     </div>
-    <h2>المحافظ</h2>
+    <h2>المحافظ <span class="hint">اضغط أي محفظة للتعديل</span></h2>
     <div id="wallets"><div class="loading">جاري التحميل…</div></div>
+    <button class="ghost" id="addWalletBtn" style="margin-top:6px">+ محفظة جديدة</button>
   </section>
 
   <!-- العمليات -->
@@ -61,11 +65,26 @@
   <!-- التقرير -->
   <section class="page" id="p-rep">
     <h2>الصرف حسب المحفظة</h2>
-    <div class="chart-card">
-      <canvas id="walletChart" height="220"></canvas>
-    </div>
+    <div class="chart-card"><canvas id="walletChart" height="220"></canvas></div>
     <h2>تفصيل الصرف</h2>
     <div id="report"></div>
+  </section>
+
+  <!-- توزيع الراتب -->
+  <section class="page" id="p-split">
+    <h2>توزيع الراتب</h2>
+    <div class="note">حدّد راتب هذا الشهر ووزّعه على المحافظ بالنسبة المئوية. المجموع يظل 100% تلقائياً.</div>
+    <div class="field">
+      <label>راتب هذا الشهر</label>
+      <input id="salaryInput" type="number" inputmode="decimal" step="0.01" placeholder="0.00">
+    </div>
+    <div id="splitList"></div>
+    <div class="split-total">
+      <div><span class="k">الموزّع</span><span class="v num" id="splitAllocated">0</span></div>
+      <div><span class="k">المتبقي</span><span class="v num" id="splitRemain">0</span></div>
+    </div>
+    <button class="primary" id="applySplitBtn">طبّق على المحافظ</button>
+    <div class="err" id="splitMsg"></div>
   </section>
 
   <!-- إضافة -->
@@ -78,9 +97,7 @@
     <div class="err" id="addErr"></div>
 
     <h2>الشهر الجديد</h2>
-    <div class="note">
-      يرجّع كل محفظة لمبلغها الشهري، ويصفّر عدّاد الصرف. سجل العمليات يبقى كما هو.
-    </div>
+    <div class="note">يرجّع كل محفظة لمبلغها الشهري، ويصفّر عدّاد الصرف. سجل العمليات يبقى كما هو.</div>
     <button class="danger" id="refillBtn">تعبئة المحافظ للشهر الجديد</button>
     <div style="height:14px"></div>
     <button class="ghost" id="outBtn">خروج</button>
@@ -90,11 +107,25 @@
     <button class="on" data-p="home"><span class="i">🏠</span>الرئيسية</button>
     <button data-p="tx"><span class="i">📋</span>العمليات</button>
     <button data-p="rep"><span class="i">📊</span>التقرير</button>
+    <button data-p="split"><span class="i">⚖️</span>التوزيع</button>
     <button data-p="add"><span class="i">➕</span>إضافة</button>
   </nav>
 </main>
 
-<!-- المنطق -->
+<!-- نافذة تعديل/إضافة المحفظة -->
+<div class="modal" id="walletModal" hidden>
+  <div class="modal-card">
+    <h3 id="modalTitle">تعديل المحفظة</h3>
+    <div class="field"><label>الاسم</label><input id="mName" type="text" placeholder="اسم المحفظة"></div>
+    <div class="field"><label>الرمز (emoji)</label><input id="mEmoji" type="text" placeholder="🏠" maxlength="4"></div>
+    <div class="field"><label>المبلغ الشهري</label><input id="mBudget" type="number" inputmode="decimal" step="0.01" placeholder="0.00"></div>
+    <div class="err" id="mErr"></div>
+    <button class="primary" id="mSaveBtn">حفظ</button>
+    <button class="danger" id="mDeleteBtn" style="margin-top:8px">حذف المحفظة</button>
+    <button class="ghost" id="mCancelBtn" style="margin-top:8px">إلغاء</button>
+  </div>
+</div>
+
 <script type="module" src="./app.js"></script>
 </body>
 </html>
