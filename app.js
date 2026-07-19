@@ -476,12 +476,11 @@ $("mDeleteBtn").onclick = async () => {
 };
 
 // ═══════════════════════════════════════════
-// ═══ الخاصية ٢: توزيع الراتب بالنسب ═══
+// ═══ الخاصية ٢: توزيع الراتب بالنسب (تحكّم يدوي كامل) ═══
 // ═══════════════════════════════════════════
-// النِسب تُحفظ في settings/split ، مع آخر راتب
+// النِسب والمبلغ يُحفظون في settings/split
 let splitPct = {};   // { walletId: نسبة }
 let splitSalary = 0;
-let splitLoaded = false;
 
 async function loadSplit() {
   const snap = await getDoc(doc(db, "settings", "split"));
@@ -490,130 +489,118 @@ async function loadSplit() {
     splitPct = d.pct || {};
     splitSalary = d.salary || 0;
   }
-  splitLoaded = true;
 }
 
 function renderSplit() {
   if (!WALLETS.length) { $("splitList").innerHTML = `<div class="empty">أضف محافظ أول</div>`; return; }
 
-  // لو ما فيه نسب محفوظة، وزّع بالتساوي كبداية
   const ids = WALLETS.map(w => w.id);
-  let anyMissing = ids.some(id => splitPct[id] === undefined);
-  if (anyMissing || !Object.keys(splitPct).length) {
-    const even = Math.floor(100 / WALLETS.length);
-    splitPct = {};
-    ids.forEach((id, i) => splitPct[id] = i === 0 ? 100 - even * (WALLETS.length - 1) : even);
-  }
+  // أي محفظة بدون نسبة محفوظة → تبدأ بصفر (ما نوزّع تلقائياً)
+  ids.forEach(id => { if (splitPct[id] === undefined) splitPct[id] = 0; });
   // نظّف نسب محافظ محذوفة
   Object.keys(splitPct).forEach(id => { if (!ids.includes(id)) delete splitPct[id]; });
 
+  // خانة المبلغ
   if (splitSalary) $("salaryInput").value = splitSalary;
 
   $("splitList").innerHTML = WALLETS.map(w => {
-    const pct = Math.round(splitPct[w.id] || 0);
+    const pct = round1(splitPct[w.id] || 0);
     return `<div class="split-row">
       <div class="top">
         <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
-        <span class="vals"><span class="pct" id="pct-${w.id}">${pct}%</span><span class="amt" id="amt-${w.id}">0</span></span>
+        <span class="vals">
+          <input class="pct-input num" id="pctin-${w.id}" type="number" inputmode="decimal"
+                 min="0" max="100" step="1" value="${pct}" data-pctin="${w.id}"> %
+          <span class="amt num" id="amt-${w.id}">0</span>
+        </span>
       </div>
-      <input type="range" min="0" max="100" value="${pct}" data-slider="${w.id}">
+      <input type="range" min="0" max="100" step="1" value="${pct}" data-slider="${w.id}">
     </div>`;
   }).join("");
 
+  // البار + الخانة متزامنين، وكل واحد مستقل (ما يعبث بالباقي)
   $("splitList").querySelectorAll("[data-slider]").forEach(s => {
-    s.oninput = () => onSliderMove(s.dataset.slider, parseInt(s.value));
+    s.oninput = () => setPct(s.dataset.slider, clampPct(parseFloat(s.value)), "slider");
+  });
+  $("splitList").querySelectorAll("[data-pctin]").forEach(inp => {
+    inp.oninput = () => setPct(inp.dataset.pctin, clampPct(parseFloat(inp.value)), "input");
   });
   recalcSplit();
 }
 
-// نمط (أ): المجموع مقفول على 100% — الفرق يوزّع بالتساوي على الباقي
-function onSliderMove(id, newVal) {
-  const others = WALLETS.map(w => w.id).filter(x => x !== id);
-  const oldVal = splitPct[id] || 0;
-  let diff = newVal - oldVal; // كم زاد (أو نقص) هذا الشريط
-  splitPct[id] = newVal;
+const clampPct = v => isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+const round1 = v => Math.round(v * 10) / 10;
 
-  // وزّع -diff على الباقي بالتساوي، مع منع السالب
-  let remaining = -diff;
-  // اجمع النسب الحالية للباقي
-  let pool = others.map(x => ({ id: x, v: splitPct[x] || 0 }));
-  const totalOthers = pool.reduce((s, o) => s + o.v, 0);
-
-  if (remaining > 0) {
-    // نحتاج نزيد الباقي (لأن هذا الشريط نقص) — بالتساوي
-    const add = remaining / others.length;
-    pool.forEach(o => splitPct[o.id] = o.v + add);
-  } else if (remaining < 0) {
-    // نحتاج ننقص من الباقي — بالتناسب عشان ما يصير سالب
-    const need = -remaining;
-    if (totalOthers <= 0) {
-      // الباقي كله صفر — ما نقدر ننقص، رجّع الشريط
-      splitPct[id] = oldVal;
-    } else {
-      pool.forEach(o => {
-        const share = (o.v / totalOthers) * need;
-        splitPct[o.id] = Math.max(0, o.v - share);
-      });
-    }
-  }
-  // تقريب وتصحيح عشان المجموع = 100 بالضبط
-  normalizeSplitTo100(id);
-  // حدّث الواجهة
-  WALLETS.forEach(w => {
-    const p = Math.round(splitPct[w.id] || 0);
-    const pctEl = $("pct-" + w.id), sl = document.querySelector(`[data-slider="${w.id}"]`);
-    if (pctEl) pctEl.textContent = p + "%";
-    if (sl && sl.dataset.slider !== id) sl.value = p; // ما نحرّك اللي بيده المستخدم
-  });
+// تعديل نسبة محفظة واحدة فقط — بدون أي توزيع تلقائي
+function setPct(id, val, source) {
+  splitPct[id] = val;
+  // زامن الطرف الثاني (لو حرّك البار، حدّث الخانة، والعكس)
+  const sl = document.querySelector(`[data-slider="${id}"]`);
+  const inp = document.querySelector(`[data-pctin="${id}"]`);
+  if (source !== "slider" && sl) sl.value = val;
+  if (source !== "input" && inp) inp.value = round1(val);
   recalcSplit();
-}
-
-function normalizeSplitTo100(lockedId) {
-  let sum = WALLETS.reduce((s, w) => s + (splitPct[w.id] || 0), 0);
-  const drift = 100 - sum;
-  if (Math.abs(drift) < 0.001) return;
-  // أضف الفرق البسيط لأول محفظة غير مقفولة
-  const target = WALLETS.find(w => w.id !== lockedId && (splitPct[w.id] || 0) + drift >= 0);
-  if (target) splitPct[target.id] = (splitPct[target.id] || 0) + drift;
-  else if (WALLETS[0]) splitPct[WALLETS[0].id] = (splitPct[WALLETS[0].id] || 0) + drift;
 }
 
 function recalcSplit() {
   const salary = parseFloat($("salaryInput").value) || 0;
-  let allocated = 0;
+  let allocatedPct = 0, allocatedAmt = 0;
   WALLETS.forEach(w => {
-    const amt = (salary * (splitPct[w.id] || 0)) / 100;
-    allocated += amt;
+    const p = splitPct[w.id] || 0;
+    allocatedPct += p;
+    const amt = (salary * p) / 100;
+    allocatedAmt += amt;
     const el = $("amt-" + w.id);
     if (el) el.textContent = money(amt);
   });
-  const remain = salary - allocated;
-  $("splitAllocated").textContent = money(allocated);
-  $("splitRemain").textContent = money(remain);
+  const remainPct = 100 - allocatedPct;
+  const remainAmt = salary - allocatedAmt;
+
+  $("splitAllocated").textContent = round1(allocatedPct) + "%";
+  $("splitRemain").textContent = round1(remainPct) + "%";
+  $("splitRemainAmt").textContent = money(remainAmt);
+
+  // تلوين: أخضر لو 100%، ذهبي لو باقي، أحمر لو تجاوز
   const box = document.querySelector(".split-total");
-  if (box) { box.classList.toggle("ok", Math.abs(remain) < 1); box.classList.toggle("bad", Math.abs(remain) >= 1); }
+  if (box) {
+    box.classList.remove("ok", "warn", "bad");
+    if (Math.abs(remainPct) < 0.05) box.classList.add("ok");
+    else if (remainPct > 0) box.classList.add("warn");
+    else box.classList.add("bad");
+  }
 }
 
-$("salaryInput").addEventListener("input", recalcSplit);
+$("salaryInput").addEventListener("input", () => {
+  splitSalary = parseFloat($("salaryInput").value) || 0;
+  recalcSplit();
+});
 
 $("applySplitBtn").onclick = async () => {
   const salary = parseFloat($("salaryInput").value);
-  if (!salary || salary <= 0) { $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب راتب صحيح"; return; }
+  if (!salary || salary <= 0) { $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب مبلغ الشهر أول"; return; }
+
+  const totalPct = WALLETS.reduce((s, w) => s + (splitPct[w.id] || 0), 0);
+  // خيار (أ): تحذير فقط لو المجموع ≠ 100% — يكمّل لو أكّد
+  if (Math.abs(totalPct - 100) >= 0.05) {
+    const msg = totalPct > 100
+      ? `مجموع النسب ${round1(totalPct)}% (تجاوزت 100%). تبي تطبّق برضه؟`
+      : `مجموع النسب ${round1(totalPct)}% (باقي ${round1(100 - totalPct)}% غير موزّع). تبي تطبّق برضه؟`;
+    if (!confirm(msg)) return;
+  }
+
   $("applySplitBtn").disabled = true; $("applySplitBtn").textContent = "…";
   try {
-    // حدّث ميزانية كل محفظة = نسبتها × الراتب
     const batch = writeBatch(db);
     WALLETS.forEach(w => {
       const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
       batch.update(doc(db, "wallets", w.id), { budget: newBudget, pct: splitPct[w.id] || 0 });
     });
     await batch.commit();
-    // احفظ النسب والراتب للشهر الجاي
     splitSalary = salary;
     await setDoc(doc(db, "settings", "split"), { pct: splitPct, salary, updatedAt: serverTimestamp() });
     $("splitMsg").style.color = "var(--teal)";
     $("splitMsg").textContent = "تم تطبيق التوزيع ✓ — استخدم \"تعبئة الشهر\" لتعبئة المحافظ بالمبالغ الجديدة";
-    setTimeout(() => { $("splitMsg").textContent = ""; }, 4000);
+    setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
   } catch (e) {
     $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
   }

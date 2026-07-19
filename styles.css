@@ -188,14 +188,28 @@ h2 .hint{margin-inline-start:auto;order:5}
 }
 
 .split-total{
-  display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:14px 0 12px;
 }
-.split-total div{background:var(--surface);padding:12px 8px;text-align:center}
-.split-total .k{font-size:.66rem;color:var(--muted);display:block;margin-bottom:3px}
-.split-total .v{font-size:1.15rem;font-weight:700}
-.split-total.bad .v#splitRemain{color:var(--red)}
-.split-total.ok .v#splitRemain{color:var(--teal)}
+.split-total div{background:var(--surface);padding:12px 6px;text-align:center}
+.split-total .k{font-size:.62rem;color:var(--muted);display:block;margin-bottom:3px}
+.split-total .v{font-size:1.05rem;font-weight:700}
+/* حالات المتبقي */
+.split-total.ok #splitRemain,.split-total.ok #splitRemainAmt{color:var(--teal)}
+.split-total.warn #splitRemain,.split-total.warn #splitRemainAmt{color:var(--gold)}
+.split-total.bad #splitRemain,.split-total.bad #splitRemainAmt{color:var(--red)}
+
+/* خانة كتابة النسبة */
+.pct-input{
+  width:58px;background:#0a1512;border:1px solid var(--line);border-radius:8px;
+  color:var(--teal);padding:5px 6px;font-size:1rem;font-weight:700;text-align:center;
+  font-family:inherit;
+}
+.pct-input:focus{outline:2px solid var(--teal);outline-offset:1px}
+.split-row .vals{align-items:center}
+/* حقل المبلغ البارز */
+.salary-field input{font-size:1.2rem;font-weight:600;text-align:center;
+  border-color:var(--teal);background:var(--surface2)}
 
 /* زر حذف العملية */
 .tx .del{
