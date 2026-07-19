@@ -599,30 +599,14 @@ async function applySplitCore(needConfirmMismatch = true) {
   return salary;
 }
 
-// زر ١: طبّق الميزانيات فقط (ما يعبّي)
-$("applySplitBtn").onclick = async () => {
-  $("applySplitBtn").disabled = true; $("applySplitBtn").textContent = "…";
-  try {
-    const ok = await applySplitCore(true);
-    if (ok !== null) {
-      $("splitMsg").style.color = "var(--teal)";
-      $("splitMsg").textContent = "تم تحديث ميزانيات المحافظ ✓";
-      setTimeout(() => { $("splitMsg").textContent = ""; }, 4000);
-    }
-  } catch (e) {
-    $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
-  }
-  $("applySplitBtn").disabled = false; $("applySplitBtn").textContent = "طبّق على المحافظ";
-};
-
-// زر ٢: طبّق + عبّي المحافظ (ينسخ الميزانية للرصيد ويصفّر الصرف) — بتأكيد
+// زر واحد: يطبّق التوزيع + يعبّي المحافظ (balance=budget، spent=0) + يحدّث الأرقام
 $("applyRefillBtn").onclick = async () => {
-  if (!confirm("⚠️ هذا يطبّق التوزيع ثم يعبّي كل محفظة بمبلغها الجديد ويصفّر عدّاد الصرف. استخدمه بداية الشهر فقط. تكمّل؟")) return;
+  if (!confirm("⚠️ هذا يطبّق التوزيع ويعبّي كل محفظة بمبلغها الجديد ويصفّر عدّاد الصرف. استخدمه بداية الشهر. تكمّل؟")) return;
   $("applyRefillBtn").disabled = true; $("applyRefillBtn").textContent = "…";
   try {
     const salary = await applySplitCore(true);
     if (salary !== null) {
-      // بعد تحديث الميزانيات، عبّي: balance = budget، spent = 0
+      // عبّي: balance = budget، spent = 0
       const batch = writeBatch(db);
       WALLETS.forEach(w => {
         const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
@@ -630,13 +614,13 @@ $("applyRefillBtn").onclick = async () => {
       });
       await batch.commit();
       $("splitMsg").style.color = "var(--teal)";
-      $("splitMsg").textContent = "تم التطبيق والتعبئة ✓ — المحافظ جاهزة للشهر الجديد";
+      $("splitMsg").textContent = "تم ✓ — المحافظ اتحدّثت وجاهزة للشهر الجديد";
       setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
     }
   } catch (e) {
     $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
   }
-  $("applyRefillBtn").disabled = false; $("applyRefillBtn").textContent = "طبّق وعبّي المحافظ للشهر الجديد";
+  $("applyRefillBtn").disabled = false; $("applyRefillBtn").textContent = "طبّق التوزيع وحدّث المحافظ";
 };
 
 // ═══ helpers ═══
