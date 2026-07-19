@@ -242,7 +242,6 @@ function renderTx() {
 // ═══ حذف عملية نهائياً — يرجّع المبلغ للمحفظة إذا كانت مخصومة ═══
 async function deleteTx(tx) {
   if (!tx) return;
-  if (!confirm(`حذف عملية "${tx.merchant || "—"}" بمبلغ ${money(tx.amount)}؟ المبلغ بيرجع للمحفظة.`)) return;
   // إذا كانت مخصومة من محفظة → رجّع المبلغ
   if (tx.status === "done" && tx.wallet) {
     await updateDoc(doc(db, "wallets", tx.wallet), {
@@ -400,12 +399,28 @@ $("addBtn").onclick = async () => {
 };
 
 // ═══ REFILL monthly ═══
+let refillArmed2 = false, refillTimer2 = null;
 $("refillBtn").onclick = async () => {
-  if (!confirm("تعبئة كل المحافظ لمبلغها الشهري وتصفير عدّاد الصرف؟")) return;
-  const b = writeBatch(db);
-  WALLETS.forEach(w => b.update(doc(db, "wallets", w.id), { balance: w.budget || 0, spent: 0 }));
-  await b.commit();
-  alert("تمت التعبئة ✓");
+  if (!refillArmed2) {
+    refillArmed2 = true;
+    $("refillBtn").textContent = "⚠️ اضغط مرة ثانية للتأكيد";
+    clearTimeout(refillTimer2);
+    refillTimer2 = setTimeout(() => { refillArmed2 = false; $("refillBtn").textContent = "تعبئة المحافظ للشهر الجديد"; }, 4000);
+    return;
+  }
+  clearTimeout(refillTimer2); refillArmed2 = false;
+  $("refillBtn").disabled = true; $("refillBtn").textContent = "…";
+  try {
+    const b = writeBatch(db);
+    WALLETS.forEach(w => b.update(doc(db, "wallets", w.id), { balance: w.budget || 0, spent: 0 }));
+    await b.commit();
+    $("refillBtn").textContent = "تمت التعبئة ✓";
+    setTimeout(() => { $("refillBtn").textContent = "تعبئة المحافظ للشهر الجديد"; }, 2500);
+  } catch (e) {
+    $("refillBtn").textContent = "صار خطأ، حاول مرة ثانية";
+    setTimeout(() => { $("refillBtn").textContent = "تعبئة المحافظ للشهر الجديد"; }, 2500);
+  }
+  $("refillBtn").disabled = false;
 };
 
 // ═══ NAV ═══
@@ -435,6 +450,7 @@ function openWalletModal(walletId) {
   $("mBudget").value = w ? (w.budget || "") : "";
   $("mErr").textContent = "";
   $("mDeleteBtn").style.display = w ? "block" : "none"; // ما نعرض حذف لمحفظة جديدة
+  $("mDeleteBtn").textContent = "حذف المحفظة"; delWalletArmed = false;
   $("walletModal").hidden = false;
 }
 function closeWalletModal() { $("walletModal").hidden = true; editingWalletId = null; }
@@ -467,10 +483,17 @@ $("mSaveBtn").onclick = async () => {
   $("mSaveBtn").disabled = false; $("mSaveBtn").textContent = "حفظ";
 };
 
+let delWalletArmed = false, delWalletTimer = null;
 $("mDeleteBtn").onclick = async () => {
   if (!editingWalletId) return;
-  const w = WALLETS.find(x => x.id === editingWalletId);
-  if (!confirm(`حذف محفظة "${w?.name}"؟ هذا الإجراء نهائي.`)) return;
+  if (!delWalletArmed) {
+    delWalletArmed = true;
+    $("mDeleteBtn").textContent = "⚠️ اضغط مرة ثانية للحذف نهائياً";
+    clearTimeout(delWalletTimer);
+    delWalletTimer = setTimeout(() => { delWalletArmed = false; $("mDeleteBtn").textContent = "حذف المحفظة"; }, 4000);
+    return;
+  }
+  clearTimeout(delWalletTimer); delWalletArmed = false;
   await deleteDoc(doc(db, "wallets", editingWalletId));
   closeWalletModal();
 };
@@ -575,18 +598,10 @@ $("salaryInput").addEventListener("input", () => {
   recalcSplit();
 });
 
-// دالة مشتركة: تحقّق + تحديث الميزانيات + حفظ. ترجّع الراتب لو نجحت، أو null لو وقفت.
-async function applySplitCore(needConfirmMismatch = true) {
+// دالة مشتركة: تحديث الميزانيات + حفظ. ترجّع الراتب لو نجحت، أو null.
+async function applySplitCore() {
   const salary = parseFloat($("salaryInput").value);
   if (!salary || salary <= 0) { $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب مبلغ الشهر أول"; return null; }
-
-  const totalPct = WALLETS.reduce((s, w) => s + (splitPct[w.id] || 0), 0);
-  if (needConfirmMismatch && Math.abs(totalPct - 100) >= 0.05) {
-    const msg = totalPct > 100
-      ? `مجموع النسب ${round1(totalPct)}% (تجاوزت 100%). تبي تكمّل؟`
-      : `مجموع النسب ${round1(totalPct)}% (باقي ${round1(100 - totalPct)}% غير موزّع). تبي تكمّل؟`;
-    if (!confirm(msg)) return null;
-  }
 
   const batch = writeBatch(db);
   WALLETS.forEach(w => {
@@ -599,14 +614,40 @@ async function applySplitCore(needConfirmMismatch = true) {
   return salary;
 }
 
-// زر واحد: يطبّق التوزيع + يعبّي المحافظ (balance=budget، spent=0) + يحدّث الأرقام
+// زر واحد: يطبّق التوزيع + يعبّي المحافظ + يحدّث الأرقام (تأكيد بضغطتين — بدون confirm)
+let refillArmed = false;
+let refillTimer = null;
 $("applyRefillBtn").onclick = async () => {
-  if (!confirm("⚠️ هذا يطبّق التوزيع ويعبّي كل محفظة بمبلغها الجديد ويصفّر عدّاد الصرف. استخدمه بداية الشهر. تكمّل؟")) return;
+  // تحقّق من المبلغ أول
+  const salaryCheck = parseFloat($("salaryInput").value);
+  if (!salaryCheck || salaryCheck <= 0) {
+    $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب مبلغ الشهر أول";
+    return;
+  }
+  // الضغطة الأولى: تسليح + تحذير
+  if (!refillArmed) {
+    refillArmed = true;
+    $("applyRefillBtn").textContent = "⚠️ اضغط مرة ثانية للتأكيد";
+    $("applyRefillBtn").style.background = "var(--gold)";
+    $("splitMsg").style.color = "var(--muted)";
+    $("splitMsg").textContent = "بيعبّي المحافظ بالمبالغ الجديدة ويصفّر الصرف";
+    clearTimeout(refillTimer);
+    refillTimer = setTimeout(() => {
+      refillArmed = false;
+      $("applyRefillBtn").textContent = "طبّق التوزيع وحدّث المحافظ";
+      $("applyRefillBtn").style.background = "";
+      $("splitMsg").textContent = "";
+    }, 4000);
+    return;
+  }
+  // الضغطة الثانية: نفّذ
+  clearTimeout(refillTimer);
+  refillArmed = false;
+  $("applyRefillBtn").style.background = "";
   $("applyRefillBtn").disabled = true; $("applyRefillBtn").textContent = "…";
   try {
-    const salary = await applySplitCore(true);
+    const salary = await applySplitCore();
     if (salary !== null) {
-      // عبّي: balance = budget، spent = 0
       const batch = writeBatch(db);
       WALLETS.forEach(w => {
         const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
@@ -618,7 +659,7 @@ $("applyRefillBtn").onclick = async () => {
       setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
     }
   } catch (e) {
-    $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
+    $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ: " + (e?.message || e);
   }
   $("applyRefillBtn").disabled = false; $("applyRefillBtn").textContent = "طبّق التوزيع وحدّث المحافظ";
 };
