@@ -40,6 +40,7 @@ onAuthStateChanged(auth, user => {
     $("login").hidden = true; $("app").hidden = false;
     $("today").textContent = new Date().toLocaleDateString("ar-SA-u-ca-gregory", { day: "numeric", month: "long" });
     loadSplit();
+    loadCounters();
     listen();
   } else {
     $("app").hidden = true; $("login").hidden = false; $("pw").value = "";
@@ -131,12 +132,15 @@ async function undo(tx) {
 }
 
 // ═══ RENDER ═══
+let txBaseline = 0; // عدد العمليات وقت آخر تصفير — نطرحه من العدّاد العلوي
+
 function renderStrip() {
   const total = WALLETS.reduce((s, w) => s + (w.balance || 0), 0);
   const spent = WALLETS.reduce((s, w) => s + (w.spent || 0), 0);
+  const doneCount = TX.filter(t => t.status === "done").length;
   $("sTotal").textContent = money(total);
   $("sSpent").textContent = money(spent);
-  $("sCount").textContent = TX.filter(t => t.status === "done").length;
+  $("sCount").textContent = Math.max(0, doneCount - txBaseline);
 }
 
 function renderWallets() {
@@ -457,6 +461,43 @@ function closeWalletModal() { $("walletModal").hidden = true; editingWalletId = 
 
 $("addWalletBtn").onclick = () => openWalletModal(null);
 $("mCancelBtn").onclick = closeWalletModal;
+
+// ═══ تصفير العدّادات (عدّاد العمليات العلوي + عدّاد الصرف في المحافظ) ═══
+// ما يمس سجل العمليات — التواريخ محفوظة للتقارير
+async function loadCounters() {
+  const snap = await getDoc(doc(db, "settings", "counters"));
+  if (snap.exists()) txBaseline = snap.data().txBaseline || 0;
+  renderStrip();
+}
+
+let resetArmed = false, resetTimer = null;
+$("resetCountersBtn").onclick = async () => {
+  if (!resetArmed) {
+    resetArmed = true;
+    $("resetCountersBtn").textContent = "⚠️ اضغط مرة ثانية للتصفير";
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => { resetArmed = false; $("resetCountersBtn").textContent = "صفّر عدّادات الصرف"; }, 4000);
+    return;
+  }
+  clearTimeout(resetTimer); resetArmed = false;
+  $("resetCountersBtn").disabled = true; $("resetCountersBtn").textContent = "…";
+  try {
+    // ١) صفّر عدّاد الصرف في كل محفظة (الأرصدة تبقى زي ما هي)
+    const batch = writeBatch(db);
+    WALLETS.forEach(w => batch.update(doc(db, "wallets", w.id), { spent: 0 }));
+    await batch.commit();
+    // ٢) صفّر العدّاد العلوي عبر تخزين خط الأساس = عدد العمليات الحالي
+    txBaseline = TX.filter(t => t.status === "done").length;
+    await setDoc(doc(db, "settings", "counters"), { txBaseline, updatedAt: serverTimestamp() });
+    renderStrip();
+    $("resetCountersBtn").textContent = "تم التصفير ✓";
+    setTimeout(() => { $("resetCountersBtn").textContent = "صفّر عدّادات الصرف"; }, 2500);
+  } catch (e) {
+    $("resetCountersBtn").textContent = "صار خطأ، حاول مرة ثانية";
+    setTimeout(() => { $("resetCountersBtn").textContent = "صفّر عدّادات الصرف"; }, 2500);
+  }
+  $("resetCountersBtn").disabled = false;
+};
 
 $("mSaveBtn").onclick = async () => {
   const name = $("mName").value.trim();
