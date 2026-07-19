@@ -575,36 +575,68 @@ $("salaryInput").addEventListener("input", () => {
   recalcSplit();
 });
 
-$("applySplitBtn").onclick = async () => {
+// دالة مشتركة: تحقّق + تحديث الميزانيات + حفظ. ترجّع الراتب لو نجحت، أو null لو وقفت.
+async function applySplitCore(needConfirmMismatch = true) {
   const salary = parseFloat($("salaryInput").value);
-  if (!salary || salary <= 0) { $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب مبلغ الشهر أول"; return; }
+  if (!salary || salary <= 0) { $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "اكتب مبلغ الشهر أول"; return null; }
 
   const totalPct = WALLETS.reduce((s, w) => s + (splitPct[w.id] || 0), 0);
-  // خيار (أ): تحذير فقط لو المجموع ≠ 100% — يكمّل لو أكّد
-  if (Math.abs(totalPct - 100) >= 0.05) {
+  if (needConfirmMismatch && Math.abs(totalPct - 100) >= 0.05) {
     const msg = totalPct > 100
-      ? `مجموع النسب ${round1(totalPct)}% (تجاوزت 100%). تبي تطبّق برضه؟`
-      : `مجموع النسب ${round1(totalPct)}% (باقي ${round1(100 - totalPct)}% غير موزّع). تبي تطبّق برضه؟`;
-    if (!confirm(msg)) return;
+      ? `مجموع النسب ${round1(totalPct)}% (تجاوزت 100%). تبي تكمّل؟`
+      : `مجموع النسب ${round1(totalPct)}% (باقي ${round1(100 - totalPct)}% غير موزّع). تبي تكمّل؟`;
+    if (!confirm(msg)) return null;
   }
 
+  const batch = writeBatch(db);
+  WALLETS.forEach(w => {
+    const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
+    batch.update(doc(db, "wallets", w.id), { budget: newBudget, pct: splitPct[w.id] || 0 });
+  });
+  await batch.commit();
+  splitSalary = salary;
+  await setDoc(doc(db, "settings", "split"), { pct: splitPct, salary, updatedAt: serverTimestamp() });
+  return salary;
+}
+
+// زر ١: طبّق الميزانيات فقط (ما يعبّي)
+$("applySplitBtn").onclick = async () => {
   $("applySplitBtn").disabled = true; $("applySplitBtn").textContent = "…";
   try {
-    const batch = writeBatch(db);
-    WALLETS.forEach(w => {
-      const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
-      batch.update(doc(db, "wallets", w.id), { budget: newBudget, pct: splitPct[w.id] || 0 });
-    });
-    await batch.commit();
-    splitSalary = salary;
-    await setDoc(doc(db, "settings", "split"), { pct: splitPct, salary, updatedAt: serverTimestamp() });
-    $("splitMsg").style.color = "var(--teal)";
-    $("splitMsg").textContent = "تم تطبيق التوزيع ✓ — استخدم \"تعبئة الشهر\" لتعبئة المحافظ بالمبالغ الجديدة";
-    setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
+    const ok = await applySplitCore(true);
+    if (ok !== null) {
+      $("splitMsg").style.color = "var(--teal)";
+      $("splitMsg").textContent = "تم تحديث ميزانيات المحافظ ✓";
+      setTimeout(() => { $("splitMsg").textContent = ""; }, 4000);
+    }
   } catch (e) {
     $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
   }
   $("applySplitBtn").disabled = false; $("applySplitBtn").textContent = "طبّق على المحافظ";
+};
+
+// زر ٢: طبّق + عبّي المحافظ (ينسخ الميزانية للرصيد ويصفّر الصرف) — بتأكيد
+$("applyRefillBtn").onclick = async () => {
+  if (!confirm("⚠️ هذا يطبّق التوزيع ثم يعبّي كل محفظة بمبلغها الجديد ويصفّر عدّاد الصرف. استخدمه بداية الشهر فقط. تكمّل؟")) return;
+  $("applyRefillBtn").disabled = true; $("applyRefillBtn").textContent = "…";
+  try {
+    const salary = await applySplitCore(true);
+    if (salary !== null) {
+      // بعد تحديث الميزانيات، عبّي: balance = budget، spent = 0
+      const batch = writeBatch(db);
+      WALLETS.forEach(w => {
+        const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
+        batch.update(doc(db, "wallets", w.id), { balance: newBudget, spent: 0 });
+      });
+      await batch.commit();
+      $("splitMsg").style.color = "var(--teal)";
+      $("splitMsg").textContent = "تم التطبيق والتعبئة ✓ — المحافظ جاهزة للشهر الجديد";
+      setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
+    }
+  } catch (e) {
+    $("splitMsg").style.color = "var(--red)"; $("splitMsg").textContent = "صار خطأ، حاول مرة ثانية";
+  }
+  $("applyRefillBtn").disabled = false; $("applyRefillBtn").textContent = "طبّق وعبّي المحافظ للشهر الجديد";
 };
 
 // ═══ helpers ═══
