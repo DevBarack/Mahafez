@@ -466,7 +466,16 @@ $("mCancelBtn").onclick = closeWalletModal;
 // ما يمس سجل العمليات — التواريخ محفوظة للتقارير
 async function loadCounters() {
   const snap = await getDoc(doc(db, "settings", "counters"));
-  if (snap.exists()) txBaseline = snap.data().txBaseline || 0;
+  if (snap.exists()) {
+    const d = snap.data();
+    // إصلاح لمرة واحدة: خط الأساس القديم يُلغى عشان العدّاد يرجع يحسب كل العمليات
+    if (!d.v2) {
+      txBaseline = 0;
+      await setDoc(doc(db, "settings", "counters"), { txBaseline: 0, v2: true });
+    } else {
+      txBaseline = d.txBaseline || 0;
+    }
+  }
   renderStrip();
 }
 
@@ -488,7 +497,7 @@ $("resetCountersBtn").onclick = async () => {
     await batch.commit();
     // ٢) صفّر العدّاد العلوي عبر تخزين خط الأساس = عدد العمليات الحالي
     txBaseline = TX.filter(t => t.status === "done").length;
-    await setDoc(doc(db, "settings", "counters"), { txBaseline, updatedAt: serverTimestamp() });
+    await setDoc(doc(db, "settings", "counters"), { txBaseline, v2: true, updatedAt: serverTimestamp() });
     renderStrip();
     $("resetCountersBtn").textContent = "تم التصفير ✓";
     setTimeout(() => { $("resetCountersBtn").textContent = "صفّر عدّادات الصرف"; }, 2500);
@@ -655,7 +664,7 @@ async function applySplitCore() {
   return salary;
 }
 
-// زر واحد: يطبّق التوزيع + يعبّي المحافظ + يحدّث الأرقام (تأكيد بضغطتين — بدون confirm)
+// زر التوزيع: يحدّث الميزانيات ويعبّي الأرصدة فقط — لا يصفّر عدّاد الصرف (منفصل)
 let refillArmed = false;
 let refillTimer = null;
 $("applyRefillBtn").onclick = async () => {
@@ -671,7 +680,7 @@ $("applyRefillBtn").onclick = async () => {
     $("applyRefillBtn").textContent = "⚠️ اضغط مرة ثانية للتأكيد";
     $("applyRefillBtn").style.background = "var(--gold)";
     $("splitMsg").style.color = "var(--muted)";
-    $("splitMsg").textContent = "بيعبّي المحافظ بالمبالغ الجديدة ويصفّر الصرف";
+    $("splitMsg").textContent = "بيحدّث ميزانيات المحافظ ويعبّي الأرصدة (ما يمس عدّاد الصرف)";
     clearTimeout(refillTimer);
     refillTimer = setTimeout(() => {
       refillArmed = false;
@@ -692,11 +701,12 @@ $("applyRefillBtn").onclick = async () => {
       const batch = writeBatch(db);
       WALLETS.forEach(w => {
         const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
-        batch.update(doc(db, "wallets", w.id), { balance: newBudget, spent: 0 });
+        // نحدّث الميزانية ونعبّي الرصيد — بدون ما نلمس spent (عدّاد الصرف منفصل)
+        batch.update(doc(db, "wallets", w.id), { balance: newBudget });
       });
       await batch.commit();
       $("splitMsg").style.color = "var(--teal)";
-      $("splitMsg").textContent = "تم ✓ — المحافظ اتحدّثت وجاهزة للشهر الجديد";
+      $("splitMsg").textContent = "تم ✓ — المحافظ اتحدّثت بالتوزيع الجديد";
       setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
     }
   } catch (e) {
