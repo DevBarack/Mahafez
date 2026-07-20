@@ -132,15 +132,19 @@ async function undo(tx) {
 }
 
 // ═══ RENDER ═══
-let txBaseline = 0; // عدد العمليات وقت آخر تصفير — نطرحه من العدّاد العلوي
+// العدّاد والصرف توأم: يُحسبان من سجل العمليات، ويحترمان آخر تصفير (خط الأساس)
+let txBaseline = 0; // عدد العمليات المكتملة وقت آخر تصفير
 
 function renderStrip() {
   const total = WALLETS.reduce((s, w) => s + (w.balance || 0), 0);
-  const spent = WALLETS.reduce((s, w) => s + (w.spent || 0), 0);
-  const doneCount = TX.filter(t => t.status === "done").length;
+  // العمليات المكتملة، الأحدث أول (TX أصلاً مرتّبة desc)
+  const doneTx = TX.filter(t => t.status === "done");
+  // نتجاهل أقدم (txBaseline) عملية — يعني نعدّ ونجمع بس اللي بعد آخر تصفير
+  const afterReset = txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+  const spent = afterReset.reduce((s, t) => s + (t.amount || 0), 0);
   $("sTotal").textContent = money(total);
   $("sSpent").textContent = money(spent);
-  $("sCount").textContent = Math.max(0, doneCount - txBaseline);
+  $("sCount").textContent = afterReset.length;
 }
 
 function renderWallets() {
@@ -268,114 +272,56 @@ function renderReport() {
   }).join("") : `<div class="empty">ما صرفت شي بعد هذا الشهر</div>`;
 }
 
-// ═══ القسم ٢: رسم دائري (Donut) — الصرف حسب المحفظة ═══
-let walletChart = null;
-// ألوان القطع — تدرّجات من ثيم التطبيق
+// ═══ القسم ٢: رسم دائري (Donut) بـSVG خام — بدون أي مكتبة خارجية ═══
 const CHART_COLORS = ["#2fa98a", "#d4af37", "#7aa6d4", "#d9645a", "#5ec9a7", "#c99b3a", "#9b8ade", "#e08a7f"];
 
 function renderWalletChart() {
-  const canvas = $("walletChart");
-  if (!canvas || typeof Chart === "undefined") return;
+  const host = $("walletChart");
+  if (!host) return;
 
   // جهّز البيانات: المحافظ اللي صُرف منها، مرتّبة تنازلي
   const spentWallets = WALLETS
     .filter(w => (w.spent || 0) > 0)
     .sort((a, b) => (b.spent || 0) - (a.spent || 0));
-
   const totalSpent = spentWallets.reduce((s, w) => s + (w.spent || 0), 0);
 
-  // لو ما فيه صرف — امسح الرسم واعرض رسالة
-  if (!spentWallets.length) {
-    if (walletChart) { walletChart.destroy(); walletChart = null; }
-    canvas.style.display = "none";
-    if (!$("noChart")) {
-      const p = document.createElement("div");
-      p.id = "noChart"; p.className = "empty";
-      p.textContent = "ما صرفت شي بعد هذا الشهر";
-      canvas.parentNode.appendChild(p);
-    }
-    return;
-  }
-  if ($("noChart")) $("noChart").remove();
-  canvas.style.display = "block";
-
-  const labels = spentWallets.map(w => `${w.emoji || ""} ${w.name}`.trim());
-  const data = spentWallets.map(w => w.spent || 0);
-  const colors = spentWallets.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
-
-  // لو الرسم موجود — حدّث بياناته بدل ما تعيد إنشاءه (أنعم)
-  if (walletChart) {
-    walletChart.data.labels = labels;
-    walletChart.data.datasets[0].data = data;
-    walletChart.data.datasets[0].backgroundColor = colors;
-    walletChart.options.plugins.centerText.total = totalSpent;
-    walletChart.update();
+  if (!spentWallets.length || totalSpent <= 0) {
+    host.innerHTML = `<div class="empty">ما صرفت شي بعد</div>`;
     return;
   }
 
-  // Plugin: يكتب الإجمالي في وسط الدائري
-  const centerText = {
-    id: "centerText",
-    afterDraw(chart) {
-      const { ctx, chartArea: { left, right, top, bottom } } = chart;
-      const cx = (left + right) / 2, cy = (top + bottom) / 2;
-      const total = chart.options.plugins.centerText?.total || 0;
-      ctx.save();
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "#eaf3f0";
-      ctx.font = "700 20px 'IBM Plex Sans Arabic', sans-serif";
-      ctx.fillText(money(total), cx, cy - 6);
-      ctx.fillStyle = "#8fa9a1";
-      ctx.font = "500 11px 'IBM Plex Sans Arabic', sans-serif";
-      ctx.fillText("إجمالي الصرف", cx, cy + 14);
-      ctx.restore();
-    }
-  };
-
-  walletChart = new Chart(canvas.getContext("2d"), {
-    type: "doughnut",
-    data: {
-      labels,
-      datasets: [{
-        data,
-        backgroundColor: colors,
-        borderColor: "#142b26",
-        borderWidth: 2,
-        hoverOffset: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      cutout: "62%",
-      plugins: {
-        centerText: { total: totalSpent },
-        legend: {
-          position: "bottom",
-          labels: {
-            color: "#8fa9a1",
-            font: { family: "'IBM Plex Sans Arabic', sans-serif", size: 12 },
-            padding: 12,
-            boxWidth: 12,
-            boxHeight: 12,
-            usePointStyle: true
-          }
-        },
-        tooltip: {
-          rtl: true,
-          bodyFont: { family: "'IBM Plex Sans Arabic', sans-serif" },
-          callbacks: {
-            label(ctx) {
-              const val = ctx.parsed;
-              const pct = totalSpent ? Math.round((val / totalSpent) * 100) : 0;
-              return ` ${money(val)} ريال · ${pct}%`;
-            }
-          }
-        }
-      },
-      animation: { animateRotate: true, duration: 700 }
-    },
-    plugins: [centerText]
+  // ابنِ الدائري: دائرة لكل محفظة بـstroke-dasharray
+  const R = 80, C = 2 * Math.PI * R, cx = 130, cy = 110;
+  let offset = 0;
+  let segments = "";
+  let legend = "";
+  spentWallets.forEach((w, i) => {
+    const val = w.spent || 0;
+    const frac = val / totalSpent;
+    const len = frac * C;
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    const pct = Math.round(frac * 100);
+    segments += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none"
+      stroke="${color}" stroke-width="26"
+      stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-offset}"
+      transform="rotate(-90 ${cx} ${cy})"></circle>`;
+    offset += len;
+    legend += `<div class="lg-item">
+      <span class="lg-dot" style="background:${color}"></span>
+      <span class="lg-name">${w.emoji || ""} ${esc(w.name)}</span>
+      <span class="lg-val num">${money(val)} · ${pct}%</span>
+    </div>`;
   });
+
+  host.innerHTML = `
+    <svg viewBox="0 0 260 220" width="100%" style="max-height:230px">
+      ${segments}
+      <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#eaf3f0"
+        style="font:700 22px 'IBM Plex Sans Arabic',sans-serif">${money(totalSpent)}</text>
+      <text x="${cx}" y="${cy + 16}" text-anchor="middle" fill="#8fa9a1"
+        style="font:500 11px 'IBM Plex Sans Arabic',sans-serif">إجمالي الصرف</text>
+    </svg>
+    <div class="chart-legend">${legend}</div>`;
 }
 
 function fillPickers() {
@@ -435,7 +381,6 @@ document.querySelectorAll("nav button").forEach(b => {
     b.classList.add("on");
     $("p-" + b.dataset.p).classList.add("on");
     window.scrollTo(0, 0);
-    if (b.dataset.p === "rep" && walletChart) walletChart.resize();
     if (b.dataset.p === "split") renderSplit();
   };
 });
