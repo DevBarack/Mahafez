@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="./styles.css?v=12">
+<link rel="stylesheet" href="./styles.css?v=16">
 </head>
 <body>
 
@@ -71,8 +71,24 @@
 
   <!-- التقرير -->
   <section class="page" id="p-rep">
+    <div class="field">
+      <label>الفترة</label>
+      <select id="repMonth"></select>
+    </div>
+    <div class="rep-stats">
+      <div><span class="k">إجمالي الصرف</span><span class="v num" id="repTotal">—</span></div>
+      <div><span class="k">عمليات</span><span class="v num" id="repCount">—</span></div>
+    </div>
     <h2>الصرف حسب المحفظة</h2>
     <div class="chart-card"><div id="walletChart"></div></div>
+    <h2>اتجاه الصرف عبر الأشهر</h2>
+    <div class="chart-card"><div id="trendChart"></div></div>
+    <h2>الأكثر صرفاً</h2>
+    <div class="seg" id="topScale">
+      <button class="on" data-scale="merchants">المتاجر</button>
+      <button data-scale="wallets">المحافظ</button>
+    </div>
+    <div id="topMerchants"></div>
     <h2>تفصيل الصرف</h2>
     <div id="report"></div>
   </section>
@@ -133,6 +149,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=12"></script>
+<script type="module" src="./app.js?v=16"></script>
 </body>
 </html>

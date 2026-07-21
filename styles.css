@@ -282,3 +282,80 @@ h2 .hint{margin-inline-start:auto;order:5}
 .env .badge{display:inline-block;background:rgba(217,100,90,.15);color:var(--red);
   font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:99px;margin-inline-start:6px;vertical-align:middle}
 .env.over{border-color:rgba(217,100,90,.45)}
+
+/* ═══ المرحلة ٤: التقرير الشهري ═══ */
+.rep-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 4px}
+.rep-stats div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 8px;text-align:center}
+.rep-stats .k{font-size:.62rem;color:var(--dim);display:block;margin-bottom:3px}
+.rep-stats .v{font-size:1.05rem;font-weight:700;color:var(--ink)}
+
+/* صف المتجر */
+.merch{padding:11px 2px;border-bottom:1px solid var(--line);position:relative}
+.merch:last-child{border:none}
+.merch .l{display:flex;align-items:center;gap:10px}
+.merch .rank{width:22px;height:22px;border-radius:7px;background:var(--surface2);color:var(--muted);
+  font-size:.7rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.merch .mname{font-size:.88rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.merch .r{display:flex;justify-content:space-between;margin:3px 0 6px;padding-inline-start:32px}
+.merch .mtotal{font-size:.85rem;font-weight:600;color:var(--teal)}
+.merch .mcount{font-size:.68rem;color:var(--dim)}
+.merch .mbar{height:4px;background:#0a1512;border-radius:99px;overflow:hidden;margin-inline-start:32px}
+.merch .mbar i{display:block;height:100%;background:var(--teal);border-radius:99px;transition:width .5s ease}
+
+/* مفتاح تبديل (segmented) */
+.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px;margin-bottom:12px}
+.seg button{flex:1;background:transparent;color:var(--dim);border:none;border-radius:9px;
+  padding:8px 4px;font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer}
+.seg button.on{background:var(--surface2);color:var(--teal)}
+
+
+/* ═══ المرحلة ٢+٣: تجميل + حركة ═══ */
+
+/* دخول متتابع للبطاقات عند فتح الصفحة */
+.page.on .env, .page.on .chart-card, .page.on .split-row, .page.on .merch,
+.page.on .rep, .page.on .tx, .page.on .rep-stats, .page.on .strip{
+  animation:cardIn .35s cubic-bezier(.2,.7,.3,1) backwards;
+}
+.page.on > *:nth-child(1){animation-delay:.02s}
+.page.on > *:nth-child(2){animation-delay:.05s}
+.page.on > *:nth-child(3){animation-delay:.08s}
+.page.on > *:nth-child(4){animation-delay:.11s}
+.page.on > *:nth-child(5){animation-delay:.14s}
+.page.on > *:nth-child(6){animation-delay:.17s}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* البطل يدخل بنبضة خفيفة */
+.hero .v{animation:heroIn .5s cubic-bezier(.2,.7,.3,1)}
+@keyframes heroIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+
+/* لمسة ضغط على البطاقات والأزرار */
+.env.tap:active{transform:scale(.985);transition:transform .1s}
+button:active{transform:scale(.97)}
+nav button:active{transform:none}
+
+/* قوائم التصنيف بستايل التطبيق (بدل الشكل النظامي) */
+select{
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238fa9a1' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:left 12px center;padding-inline-start:30px;
+}
+
+/* التوزيع: صفوف أوسع وأنظف */
+.split-row{padding:15px 16px;border-radius:16px;margin-bottom:11px}
+.split-row .name{font-size:.95rem}
+
+/* العمليات: المبلغ أبرز */
+.tx .r .a{font-size:1.02rem;color:var(--ink)}
+.tx{padding:13px 4px}
+
+/* المودال: خلفية أغمق + دخول أنعم */
+.modal{background:rgba(0,0,0,.72)}
+
+/* التقرير: بطاقات الرسم أوسع */
+.chart-card{padding:18px 16px;border-radius:16px}
+
+/* احترام تفضيل تقليل الحركة */
+@media(prefers-reduced-motion:reduce){
+  .page.on .env,.page.on .chart-card,.page.on .split-row,.page.on .merch,
+  .page.on .rep,.page.on .tx,.page.on .rep-stats,.page.on .strip,.hero .v{animation:none}
+}

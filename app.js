@@ -53,11 +53,11 @@ onAuthStateChanged(auth, user => {
 function listen() {
   unsub.push(onSnapshot(query(collection(db, "wallets"), orderBy("order")), snap => {
     WALLETS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderWallets(); renderReview(); fillPickers(); renderReport(); renderWalletChart();
+    renderWallets(); renderReview(); fillPickers(); renderReportAll();
   }));
   unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(150)), snap => {
     TX = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderReview(); renderUnparsed(); renderTx(); renderWallets(); renderReport(); renderWalletChart(); renderStrip();
+    renderReview(); renderUnparsed(); renderTx(); renderWallets(); buildMonthPicker(); renderReportAll(); renderStrip();
     autoSort();
   }));
 }
@@ -147,7 +147,7 @@ function renderStrip() {
   const remaining = salary - spent; // المتبقي من المبلغ الأساسي
   $("sSalary").textContent = money(salary);
   $("sSalarySub").textContent = `من ${sar(salary)}`;
-  $("sTotal").textContent = sar(remaining);
+  countUpTo($("sTotal"), remaining);
   $("sSpent").textContent = money(spent);
   $("sCount").textContent = afterReset.length;
 }
@@ -316,8 +316,163 @@ function spentByWalletFromTx() {
   return map;
 }
 
+// ═══ التقرير الشهري: اختيار الفترة ═══
+let repPeriod = "current"; // "current" أو "YYYY-MM"
+
+// عمليات الفترة المختارة
+function txForPeriod() {
+  const doneTx = TX.filter(t => t.status === "done");
+  if (repPeriod === "current") {
+    return txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+  }
+  // شهر معيّن: فلترة بتاريخ العملية
+  const [y, m] = repPeriod.split("-").map(Number);
+  return doneTx.filter(t => {
+    const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    return d && d.getFullYear() === y && (d.getMonth() + 1) === m;
+  });
+}
+
+// ابنِ قائمة الأشهر من تواريخ العمليات الفعلية
+function buildMonthPicker() {
+  const sel = $("repMonth");
+  if (!sel) return;
+  const months = new Set();
+  TX.filter(t => t.status === "done").forEach(t => {
+    const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    if (d) months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  });
+  const sorted = [...months].sort().reverse(); // الأحدث أول
+  const monthName = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("ar-SA-u-ca-gregory", { month: "long", year: "numeric" });
+  };
+  const cur = sel.value || "current";
+  sel.innerHTML = `<option value="current">الفترة الحالية (منذ آخر تصفير)</option>` +
+    sorted.map(ym => `<option value="${ym}">${monthName(ym)}</option>`).join("");
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "current";
+  sel.onchange = () => {
+    repPeriod = sel.value;
+    renderReportAll();
+  };
+}
+
+// صرف كل محفظة ضمن الفترة المختارة
+function spentByWalletForPeriod() {
+  const map = {};
+  txForPeriod().forEach(t => { if (t.wallet) map[t.wallet] = (map[t.wallet] || 0) + (t.amount || 0); });
+  return map;
+}
+
+// ═══ ترند الصرف عبر الأشهر — أعمدة SVG من كامل السجل ═══
+function renderTrendChart() {
+  const host = $("trendChart");
+  if (!host) return;
+  // جمّع الصرف حسب الشهر من كل العمليات المكتملة
+  const byMonth = {};
+  TX.filter(t => t.status === "done").forEach(t => {
+    const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    if (!d) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    byMonth[key] = (byMonth[key] || 0) + (t.amount || 0);
+  });
+  const months = Object.keys(byMonth).sort(); // الأقدم → الأحدث
+  if (months.length < 1) { host.innerHTML = `<div class="empty">ما فيه بيانات بعد</div>`; return; }
+
+  const labelOf = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("ar-SA-u-ca-gregory", { month: "short" });
+  };
+  const max = Math.max(...months.map(k => byMonth[k]), 1);
+
+  const W = 340, H = 190, padB = 34, padT = 26;
+  const n = months.length;
+  const gap = 14;
+  const barW = Math.min(56, (W - gap * (n + 1)) / n);
+  const chartH = H - padB - padT;
+
+  let bars = "";
+  months.forEach((k, i) => {
+    const v = byMonth[k];
+    const h = Math.max(4, (v / max) * chartH);
+    const x = gap + i * (barW + gap);
+    const y = H - padB - h;
+    const isLast = i === n - 1; // الشهر الأحدث مميّز
+    bars += `
+      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="7"
+        fill="${isLast ? "#2fa98a" : "#1e5c4c"}"/>
+      <text x="${x + barW / 2}" y="${y - 8}" text-anchor="middle" fill="#8fa9a1"
+        style="font:600 11px 'IBM Plex Sans Arabic',sans-serif">${money(v)}</text>
+      <text x="${x + barW / 2}" y="${H - padB + 18}" text-anchor="middle" fill="#5e7a72"
+        style="font:500 11px 'IBM Plex Sans Arabic',sans-serif">${labelOf(k)}</text>`;
+  });
+
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-height:210px">
+    <line x1="0" y1="${H - padB}" x2="${W}" y2="${H - padB}" stroke="#22463f" stroke-width="1"/>
+    ${bars}
+  </svg>`;
+}
+
+// ═══ الأكثر صرفاً (للفترة المختارة) — مستويين: متاجر أو محافظ ═══
+let topScale = "merchants"; // "merchants" أو "wallets"
+
+function renderTopMerchants() {
+  const host = $("topMerchants");
+  if (!host) return;
+  const byKey = {};
+  txForPeriod().forEach(t => {
+    let key, emoji = "";
+    if (topScale === "wallets") {
+      const w = WALLETS.find(x => x.id === t.wallet);
+      key = w ? w.name : (t.walletName || "غير مصنّفة");
+      emoji = w?.emoji || "";
+    } else {
+      key = (t.merchant || "غير معروف").trim();
+    }
+    if (!byKey[key]) byKey[key] = { total: 0, count: 0, emoji };
+    byKey[key].total += t.amount || 0;
+    byKey[key].count++;
+  });
+  const sorted = Object.entries(byKey).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+  if (!sorted.length) { host.innerHTML = `<div class="empty">ما فيه عمليات في هذه الفترة</div>`; return; }
+  const max = sorted[0][1].total || 1;
+  host.innerHTML = sorted.map(([name, d], i) => `
+    <div class="merch">
+      <div class="l"><span class="rank num">${i + 1}</span><span class="mname">${d.emoji ? d.emoji + " " : ""}${esc(name)}</span></div>
+      <div class="r"><span class="mtotal num">${sar(d.total)}</span><span class="mcount num">${d.count} عملية</span></div>
+      <div class="mbar"><i style="width:${(d.total / max) * 100}%"></i></div>
+    </div>`).join("");
+}
+
+// مفتاح التبديل بين المستويين
+document.querySelectorAll("#topScale button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll("#topScale button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    topScale = b.dataset.scale;
+    renderTopMerchants();
+  };
+});
+
+// إحصائيات الفترة (إجمالي + عدد)
+function renderRepStats() {
+  const tx = txForPeriod();
+  const total = tx.reduce((s, t) => s + (t.amount || 0), 0);
+  if ($("repTotal")) $("repTotal").textContent = sar(total);
+  if ($("repCount")) $("repCount").textContent = tx.length;
+}
+
+// يجدّد كل أقسام التقرير معاً
+function renderReportAll() {
+  renderRepStats();
+  renderWalletChart();
+  renderTrendChart();
+  renderTopMerchants();
+  renderReport();
+}
+
 function renderReport() {
-  const spentMap = spentByWalletFromTx();
+  const spentMap = spentByWalletForPeriod();
   const max = Math.max(...WALLETS.map(w => spentMap[w.id] || 0), 1);
   const sorted = [...WALLETS]
     .map(w => ({ ...w, _spent: spentMap[w.id] || 0 }))
@@ -340,8 +495,8 @@ function renderWalletChart() {
   const host = $("walletChart");
   if (!host) return;
 
-  // البيانات من سجل العمليات (يطابق تفصيل الصرف والشريط العلوي)
-  const spentMap = spentByWalletFromTx();
+  // البيانات من الفترة المختارة في التقرير
+  const spentMap = spentByWalletForPeriod();
   const spentWallets = WALLETS
     .map(w => ({ ...w, _spent: spentMap[w.id] || 0 }))
     .filter(w => w._spent > 0)
@@ -757,6 +912,24 @@ $("applyRefillBtn").onclick = async () => {
 };
 
 // ═══ helpers ═══
+// عدّاد تصاعدي ناعم للرقم البطل (يوقف على القيمة النهائية)
+let countUpRaf = null;
+function countUpTo(el, target) {
+  if (!el) return;
+  const prev = parseFloat((el.dataset.val || "0")) || 0;
+  el.dataset.val = target;
+  if (Math.abs(target - prev) < 0.01) { el.textContent = sar(target); return; }
+  if (countUpRaf) cancelAnimationFrame(countUpRaf);
+  const start = performance.now(), dur = 500;
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / dur);
+    const ease = 1 - Math.pow(1 - p, 3); // easeOutCubic
+    el.textContent = sar(prev + (target - prev) * ease);
+    if (p < 1) countUpRaf = requestAnimationFrame(step);
+  };
+  countUpRaf = requestAnimationFrame(step);
+}
+
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 function fmt(ts) {
   if (!ts?.toDate) return "";
