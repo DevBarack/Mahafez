@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="./styles.css?v=10">
+<link rel="stylesheet" href="./styles.css?v=11">
 </head>
 <body>
 
@@ -34,9 +34,10 @@
     <span class="date num" id="today"></span>
   </header>
 
-  <div class="strip">
+  <div class="strip strip4">
+    <div><span class="k">مبلغ الشهر</span><span class="v num" id="sSalary">—</span></div>
     <div><span class="k">المتبقي</span><span class="v num" id="sTotal">—</span></div>
-    <div><span class="k">صُرف هذا الشهر</span><span class="v num" id="sSpent">—</span></div>
+    <div><span class="k">صُرف</span><span class="v num" id="sSpent">—</span></div>
     <div><span class="k">عمليات</span><span class="v num" id="sCount">—</span></div>
   </div>
 
@@ -126,6 +127,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=10"></script>
+<script type="module" src="./app.js?v=11"></script>
 </body>
 </html>

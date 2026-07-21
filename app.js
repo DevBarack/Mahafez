@@ -138,13 +138,15 @@ async function undo(tx) {
 let txBaseline = 0; // عدد العمليات المكتملة وقت آخر تصفير
 
 function renderStrip() {
-  const total = WALLETS.reduce((s, w) => s + (w.balance || 0), 0);
-  // العمليات المكتملة، الأحدث أول (TX أصلاً مرتّبة desc)
+  // العمليات المكتملة بعد آخر تصفير
   const doneTx = TX.filter(t => t.status === "done");
-  // نتجاهل أقدم (txBaseline) عملية — يعني نعدّ ونجمع بس اللي بعد آخر تصفير
   const afterReset = txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
   const spent = afterReset.reduce((s, t) => s + (t.amount || 0), 0);
-  $("sTotal").textContent = sar(total);
+  // مبلغ الشهر الثابت = الراتب المحفوظ في التوزيع (أو مجموع الحدود لو ما فيه راتب)
+  const salary = splitSalary || WALLETS.reduce((s, w) => s + (w.budget || 0), 0);
+  const remaining = salary - spent; // المتبقي من المبلغ الأساسي
+  $("sSalary").textContent = sar(salary);
+  $("sTotal").textContent = sar(remaining);
   $("sSpent").textContent = sar(spent);
   $("sCount").textContent = afterReset.length;
 }

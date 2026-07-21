@@ -260,3 +260,8 @@ h2 .hint{margin-inline-start:auto;order:5}
   color:var(--muted);padding:4px 8px;font-size:.72rem;font-family:inherit;max-width:160px;
 }
 .tx .l{min-width:0}
+
+/* شريط علوي بـ٤ خانات */
+.strip4{grid-template-columns:1fr 1fr 1fr 1fr}
+.strip4 .v{font-size:.98rem}
+.strip4 .k{font-size:.62rem}
