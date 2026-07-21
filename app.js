@@ -145,9 +145,10 @@ function renderStrip() {
   // مبلغ الشهر الثابت = الراتب المحفوظ في التوزيع (أو مجموع الحدود لو ما فيه راتب)
   const salary = splitSalary || WALLETS.reduce((s, w) => s + (w.budget || 0), 0);
   const remaining = salary - spent; // المتبقي من المبلغ الأساسي
-  $("sSalary").textContent = sar(salary);
+  $("sSalary").textContent = money(salary);
+  $("sSalarySub").textContent = `من ${sar(salary)}`;
   $("sTotal").textContent = sar(remaining);
-  $("sSpent").textContent = sar(spent);
+  $("sSpent").textContent = money(spent);
   $("sCount").textContent = afterReset.length;
 }
 
@@ -169,7 +170,7 @@ function renderWallets() {
     return `<div class="env tap ${cls}" data-edit="${w.id}" style="color:${color}">
       <div class="fill" style="inline-size:${fillPct}%"></div>
       <div class="top">
-        <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
+        <span class="name">${w.emoji || ""} ${esc(w.name)}${overBudget ? '<span class="badge">تجاوز</span>' : ''}</span>
         <span class="bal num">${sar(bal)}</span>
       </div>
       <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${sar(spent)}</span></div>

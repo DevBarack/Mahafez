@@ -48,8 +48,8 @@ header .date{font-size:.75rem;color:var(--dim)}
 
 /* ── Section title ── */
 h2{
-  font-size:.78rem;font-weight:600;color:var(--gold);letter-spacing:.04em;
-  margin:22px 0 10px;display:flex;align-items:center;gap:8px;
+  font-size:.72rem;font-weight:600;color:var(--muted);letter-spacing:.1em;
+  margin:26px 0 14px;display:flex;align-items:center;gap:10px;
 }
 h2::after{content:"";flex:1;height:1px;background:var(--line)}
 .count{
@@ -74,7 +74,7 @@ h2::after{content:"";flex:1;height:1px;background:var(--line)}
 /* ── Wallet envelope ── */
 .env{
   background:var(--surface);border:1px solid var(--line);
-  border-radius:var(--r);padding:13px 14px;margin-bottom:9px;
+  border-radius:16px;padding:17px 18px;margin-bottom:12px;
   position:relative;overflow:hidden;
 }
 .env .fill{
@@ -86,7 +86,7 @@ h2::after{content:"";flex:1;height:1px;background:var(--line)}
 .env > *{position:relative}
 .env .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .env .name{font-weight:500;font-size:.95rem}
-.env .bal{font-size:1.2rem;font-weight:700;white-space:nowrap}
+.env .bal{font-size:1.3rem;font-weight:700;white-space:nowrap}
 .env .sub{
   display:flex;justify-content:space-between;
   font-size:.7rem;color:var(--dim);margin-top:2px;
@@ -265,3 +265,20 @@ h2 .hint{margin-inline-start:auto;order:5}
 .strip4{grid-template-columns:1fr 1fr 1fr 1fr}
 .strip4 .v{font-size:.98rem}
 .strip4 .k{font-size:.62rem}
+
+
+/* ═══ المرحلة ١: البطل + التنفّس ═══ */
+.hero{text-align:center;padding:8px 0 20px}
+.hero .k{font-size:.72rem;color:var(--muted);letter-spacing:.06em;display:block;margin-bottom:4px}
+.hero .v{font-size:2.3rem;font-weight:700;color:#43c9a5;letter-spacing:-.02em;line-height:1.15}
+.hero .sub{font-size:.74rem;color:var(--dim);margin-top:4px}
+
+.strip3{grid-template-columns:1fr 1fr 1fr;gap:10px;background:transparent;border:none;overflow:visible}
+.strip3 div{border:1px solid var(--line);border-radius:14px}
+.strip3 .v{font-size:.92rem;color:var(--muted)}
+.strip3 .k{font-size:.6rem;color:var(--dim)}
+
+/* شارة تجاوز */
+.env .badge{display:inline-block;background:rgba(217,100,90,.15);color:var(--red);
+  font-size:.6rem;font-weight:700;padding:2px 8px;border-radius:99px;margin-inline-start:6px;vertical-align:middle}
+.env.over{border-color:rgba(217,100,90,.45)}
