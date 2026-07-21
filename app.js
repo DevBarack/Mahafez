@@ -15,6 +15,8 @@ const auth = getAuth(fb);
 const db = getFirestore(fb);
 const $ = id => document.getElementById(id);
 const money = n => (Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+// نسخة العرض: الرقم متبوع بـ"ر.س" (تُستخدم في العرض فقط، مو في خانات الإدخال)
+const sar = n => `${money(n)} ر.س`;
 
 let WALLETS = [], TX = [], unsub = [];
 
@@ -142,8 +144,8 @@ function renderStrip() {
   // نتجاهل أقدم (txBaseline) عملية — يعني نعدّ ونجمع بس اللي بعد آخر تصفير
   const afterReset = txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
   const spent = afterReset.reduce((s, t) => s + (t.amount || 0), 0);
-  $("sTotal").textContent = money(total);
-  $("sSpent").textContent = money(spent);
+  $("sTotal").textContent = sar(total);
+  $("sSpent").textContent = sar(spent);
   $("sCount").textContent = afterReset.length;
 }
 
@@ -161,9 +163,9 @@ function renderWallets() {
       <div class="fill" style="inline-size:${pct}%"></div>
       <div class="top">
         <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
-        <span class="bal num">${money(bal)}</span>
+        <span class="bal num">${sar(bal)}</span>
       </div>
-      <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${money(spent)}</span></div>
+      <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${sar(spent)}</span></div>
     </div>`;
   }).join("");
   el.querySelectorAll("[data-edit]").forEach(c => {
@@ -181,7 +183,7 @@ function renderReview() {
     <div class="review">
       <div class="top">
         <span class="merchant">${esc(t.merchant || "بدون اسم")}</span>
-        <span class="amt num">${money(t.amount)}</span>
+        <span class="amt num">${sar(t.amount)}</span>
       </div>
       <div class="meta num">${fmt(t.createdAt)}</div>
       <div class="row">
@@ -239,7 +241,7 @@ function renderTx() {
           ${WALLETS.map(w => `<option value="${w.id}" ${w.id === t.wallet ? "selected" : ""}>${w.emoji || ""} ${esc(w.name)}</option>`).join("")}
         </select>
       </div>
-      <div class="r"><div class="a num">${money(t.amount)}</div><div class="d num">${fmt(t.createdAt)}</div></div>
+      <div class="r"><div class="a num">${sar(t.amount)}</div><div class="d num">${fmt(t.createdAt)}</div></div>
       <div class="acts">
         <button class="undo" data-undo="${t.id}">تراجع</button>
         <button class="del" data-del="${t.id}">حذف</button>
@@ -317,7 +319,7 @@ function renderReport() {
     const s = w._spent, bud = w.budget || 1;
     const over = s > bud;
     return `<div class="rep">
-      <div class="l"><span>${w.emoji || ""} ${w.name}</span><span class="num" style="color:${over ? "var(--red)" : "var(--muted)"}">${money(s)} / ${money(bud)}</span></div>
+      <div class="l"><span>${w.emoji || ""} ${w.name}</span><span class="num" style="color:${over ? "var(--red)" : "var(--muted)"}">${money(s)} / ${sar(bud)}</span></div>
       <div class="bar"><div style="width:${Math.min(100, (s / max) * 100)}%;background:${over ? "var(--red)" : "var(--teal)"}"></div></div>
     </div>`;
   }).join("") : `<div class="empty">ما صرفت شي بعد هذا الشهر</div>`;
@@ -362,7 +364,7 @@ function renderWalletChart() {
     legend += `<div class="lg-item">
       <span class="lg-dot" style="background:${color}"></span>
       <span class="lg-name">${w.emoji || ""} ${esc(w.name)}</span>
-      <span class="lg-val num">${money(val)} · ${pct}%</span>
+      <span class="lg-val num">${sar(val)} · ${pct}%</span>
     </div>`;
   });
 
@@ -370,7 +372,7 @@ function renderWalletChart() {
     <svg viewBox="0 0 260 220" width="100%" style="max-height:230px">
       ${segments}
       <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#eaf3f0"
-        style="font:700 22px 'IBM Plex Sans Arabic',sans-serif">${money(totalSpent)}</text>
+        style="font:700 22px 'IBM Plex Sans Arabic',sans-serif">${sar(totalSpent)}</text>
       <text x="${cx}" y="${cy + 16}" text-anchor="middle" fill="#8fa9a1"
         style="font:500 11px 'IBM Plex Sans Arabic',sans-serif">إجمالي الصرف</text>
     </svg>
@@ -672,7 +674,7 @@ function recalcSplit() {
   // خزّن النسب (الجسر) من المبالغ الحالية
   WALLETS.forEach(w => { splitPct[w.id] = total ? ((splitAmt[w.id] || 0) / total) * 100 : 0; });
 
-  $("splitAllocated").textContent = money(total);
+  $("splitAllocated").textContent = sar(total);
   const totalPct = WALLETS.reduce((s, w) => s + (splitPct[w.id] || 0), 0);
   $("splitRemain").textContent = round1(totalPct) + "%";
 
