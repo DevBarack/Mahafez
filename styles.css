@@ -79,8 +79,10 @@ h2::after{content:"";flex:1;height:1px;background:var(--line)}
 }
 .env .fill{
   position:absolute;inset-block:0;inset-inline-start:0;
-  background:currentColor;opacity:.10;transition:inline-size .5s ease;
+  background:currentColor;opacity:.20;transition:inline-size .6s cubic-bezier(.4,0,.2,1);
+  border-inline-end:2px solid currentColor;
 }
+.env.over .fill{opacity:.28}
 .env > *{position:relative}
 .env .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .env .name{font-weight:500;font-size:.95rem}
