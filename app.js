@@ -55,7 +55,7 @@ function listen() {
   }));
   unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(150)), snap => {
     TX = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderReview(); renderUnparsed(); renderTx(); renderReport(); renderWalletChart(); renderStrip();
+    renderReview(); renderUnparsed(); renderTx(); renderWallets(); renderReport(); renderWalletChart(); renderStrip();
     autoSort();
   }));
 }
@@ -150,8 +150,10 @@ function renderStrip() {
 function renderWallets() {
   const el = $("wallets");
   if (!WALLETS.length) { el.innerHTML = `<div class="empty">ما فيه محافظ بعد — أضف وحدة بالزر تحت</div>`; return; }
+  const spentMap = spentByWalletFromTx(); // نفس مصدر التقرير والشريط العلوي
   el.innerHTML = WALLETS.map(w => {
     const bal = w.balance || 0, bud = w.budget || 1;
+    const spent = spentMap[w.id] || 0;
     const pct = Math.max(0, Math.min(100, (bal / bud) * 100));
     const cls = bal < 0 ? "over" : pct < 25 ? "low" : "";
     const color = bal < 0 ? "var(--red)" : pct < 25 ? "var(--gold)" : "var(--teal)";
@@ -161,7 +163,7 @@ function renderWallets() {
         <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
         <span class="bal num">${money(bal)}</span>
       </div>
-      <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${money(w.spent || 0)}</span></div>
+      <div class="sub"><span class="num">من ${money(bud)}</span><span class="num">صُرف ${money(spent)}</span></div>
     </div>`;
   }).join("");
   el.querySelectorAll("[data-edit]").forEach(c => {
