@@ -94,13 +94,14 @@ h2::after{content:"";flex:1;height:1px;background:var(--line)}
 
 /* ── Transactions ── */
 .tx{
-  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  display:grid;grid-template-columns:minmax(0,1fr) 96px auto;
+  align-items:center;gap:10px;
   padding:11px 4px;border-bottom:1px solid var(--line);font-size:.88rem;
 }
 .tx:last-child{border:none}
 .tx .l .m{font-weight:500}
 .tx .l .w{font-size:.7rem;color:var(--dim)}
-.tx .r{text-align:end;white-space:nowrap}
+.tx .r{text-align:center;white-space:nowrap}
 .tx .r .a{font-weight:600}
 .tx .r .d{font-size:.68rem;color:var(--dim)}
 .tx .undo{
