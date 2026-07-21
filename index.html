@@ -73,16 +73,15 @@
   <!-- توزيع الراتب -->
   <section class="page" id="p-split">
     <h2>توزيع الراتب</h2>
-    <div class="note">اكتب مبلغ هذا الشهر، ووزّع النسب على المحافظ بنفسك — كتابةً أو بالبار. الحقول تحت توضّح كم باقي للتوزيع.</div>
+    <div class="note">طريقتان: اكتب <b>مبلغ الشهر</b> فوق ← يتوزّع على المحافظ حسب نسبها. أو عبّي <b>مبالغ المحافظ</b> ← المجموع يصير راتبك والنسب تتحسب.</div>
     <div class="field salary-field">
-      <label>مبلغ هذا الشهر</label>
-      <input id="salaryInput" type="number" inputmode="decimal" step="0.01" placeholder="اكتب الراتب / الدخل">
+      <label>مبلغ هذا الشهر (أو مجموع المحافظ)</label>
+      <input id="salaryInput" type="number" inputmode="decimal" step="0.01" placeholder="اكتب الراتب">
     </div>
     <div id="splitList"></div>
-    <div class="split-total warn">
-      <div><span class="k">النسبة الموزّعة</span><span class="v num" id="splitAllocated">0%</span></div>
-      <div><span class="k">المتبقي للتوزيع</span><span class="v num" id="splitRemain">100%</span></div>
-      <div><span class="k">المبلغ المتبقي</span><span class="v num" id="splitRemainAmt">0</span></div>
+    <div class="split-total ok">
+      <div><span class="k">مجموع المحافظ</span><span class="v num" id="splitAllocated">0</span></div>
+      <div><span class="k">النِسب</span><span class="v num" id="splitRemain">0%</span></div>
     </div>
     <button class="primary" id="applyRefillBtn">طبّق التوزيع وحدّث المحافظ</button>
     <div class="err" id="splitMsg"></div>

@@ -199,14 +199,15 @@ h2 .hint{margin-inline-start:auto;order:5}
 .split-total.warn #splitRemain,.split-total.warn #splitRemainAmt{color:var(--gold)}
 .split-total.bad #splitRemain,.split-total.bad #splitRemainAmt{color:var(--red)}
 
-/* خانة كتابة النسبة */
-.pct-input{
-  width:58px;background:#0a1512;border:1px solid var(--line);border-radius:8px;
-  color:var(--teal);padding:5px 6px;font-size:1rem;font-weight:700;text-align:center;
+/* خانة كتابة المبلغ + شارة النسبة */
+.amt-input{
+  width:80px;background:#0a1512;border:1px solid var(--line);border-radius:8px;
+  color:var(--teal);padding:6px 8px;font-size:1rem;font-weight:700;text-align:center;
   font-family:inherit;
 }
-.pct-input:focus{outline:2px solid var(--teal);outline-offset:1px}
-.split-row .vals{align-items:center}
+.amt-input:focus{outline:2px solid var(--teal);outline-offset:1px}
+.pct-badge{font-size:.78rem;color:var(--muted);min-width:42px;text-align:center}
+.split-row .vals{align-items:center;gap:8px}
 /* حقل المبلغ البارز */
 .salary-field input{font-size:1.2rem;font-weight:600;text-align:center;
   border-color:var(--teal);background:var(--surface2)}
