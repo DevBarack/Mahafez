@@ -232,7 +232,11 @@ function renderTx() {
   const done = TX.filter(t => t.status === "done");
   $("txList").innerHTML = done.length ? done.map(t => `
     <div class="tx">
-      <div class="l"><div class="m">${esc(t.merchant || "—")}</div><div class="w">${esc(t.walletName || "")}</div></div>
+      <div class="l"><div class="m">${esc(t.merchant || "—")}</div>
+        <select class="tx-wallet" data-reassign="${t.id}">
+          ${WALLETS.map(w => `<option value="${w.id}" ${w.id === t.wallet ? "selected" : ""}>${w.emoji || ""} ${esc(w.name)}</option>`).join("")}
+        </select>
+      </div>
       <div class="r"><div class="a num">${money(t.amount)}</div><div class="d num">${fmt(t.createdAt)}</div></div>
       <div class="acts">
         <button class="undo" data-undo="${t.id}">تراجع</button>
@@ -245,6 +249,38 @@ function renderTx() {
   $("txList").querySelectorAll("[data-del]").forEach(b => {
     b.onclick = () => deleteTx(TX.find(t => t.id === b.dataset.del));
   });
+  // تغيير تصنيف العملية لمحفظة ثانية
+  $("txList").querySelectorAll("[data-reassign]").forEach(sel => {
+    sel.onchange = () => reassignTx(TX.find(t => t.id === sel.dataset.reassign), sel.value);
+  });
+}
+
+// ═══ تعديل تصنيف عملية: انقلها من محفظتها الحالية لمحفظة ثانية ═══
+// يرجّع المبلغ للمحفظة القديمة، ويخصمه من الجديدة، ويحدّث ذاكرة المتجر
+async function reassignTx(tx, newWalletId) {
+  if (!tx || !newWalletId || newWalletId === tx.wallet) return;
+  const newW = WALLETS.find(w => w.id === newWalletId);
+  if (!newW) return;
+  // رجّع المبلغ للمحفظة القديمة
+  if (tx.wallet) {
+    await updateDoc(doc(db, "wallets", tx.wallet), {
+      balance: increment(tx.amount), spent: increment(-tx.amount)
+    });
+  }
+  // اخصم من المحفظة الجديدة
+  await updateDoc(doc(db, "wallets", newWalletId), {
+    balance: increment(-tx.amount), spent: increment(tx.amount)
+  });
+  // حدّث العملية
+  await updateDoc(doc(db, "transactions", tx.id), {
+    wallet: newWalletId, walletName: newW.name
+  });
+  // علّم الذاكرة: هذا المتجر يروح للمحفظة الجديدة (عشان المرات الجاية)
+  if (tx.merchant) {
+    await setDoc(doc(db, "merchants", norm(tx.merchant)), {
+      wallet: newWalletId, merchant: tx.merchant, updatedAt: serverTimestamp()
+    });
+  }
 }
 
 // ═══ حذف عملية نهائياً — يرجّع المبلغ للمحفظة إذا كانت مخصومة ═══
@@ -535,40 +571,47 @@ function renderSplit() {
     const amt = round2(splitAmt[w.id] || 0);
     const pct = splitSalary ? round1((amt / splitSalary) * 100) : 0;
     return `<div class="split-row">
-      <div class="top">
-        <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
-        <span class="vals">
-          <input class="amt-input num" id="amtin-${w.id}" type="number" inputmode="decimal"
-                 step="0.01" value="${amt || ""}" placeholder="0" data-amtin="${w.id}">
-          <span class="pct-badge num" id="pctb-${w.id}">${pct}%</span>
-        </span>
+      <div class="top"><span class="name">${w.emoji || ""} ${esc(w.name)}</span></div>
+      <div class="io">
+        <span class="io-box"><input class="amt-input num" id="amtin-${w.id}" type="number" inputmode="decimal"
+               step="0.01" value="${amt || ""}" placeholder="0" data-amtin="${w.id}"><label>ريال</label></span>
+        <span class="io-box"><input class="pct-input num" id="pctin-${w.id}" type="number" inputmode="decimal"
+               step="0.1" value="${pct || ""}" placeholder="0" data-pctin="${w.id}"><label>%</label></span>
       </div>
       <input type="range" min="0" max="100" step="0.5" value="${pct}" data-slider="${w.id}">
     </div>`;
   }).join("");
 
-  // كتابة مبلغ محفظة → المجموع يصير الراتب، والنسب تتحدّث
+  // كتابة مبلغ → المجموع يصير الراتب، والنسب تتحدّث
   $("splitList").querySelectorAll("[data-amtin]").forEach(inp => {
     inp.oninput = () => {
       const id = inp.dataset.amtin;
       splitAmt[id] = parseFloat(inp.value) || 0;
       splitSalary = sumAmts();
       $("salaryInput").value = round2(splitSalary) || "";
-      refreshPctsAndSliders();
+      refreshRowsExcept("amt", id);
       recalcSplit();
     };
   });
 
-  // تحريك البار = تغيير نسبة المحفظة من الراتب الحالي → يحدّث مبلغها فقط
+  // كتابة نسبة → مبلغها = نسبة × الراتب (الراتب ثابت)
+  $("splitList").querySelectorAll("[data-pctin]").forEach(inp => {
+    inp.oninput = () => {
+      const id = inp.dataset.pctin;
+      const pct = Math.max(0, Math.min(100, parseFloat(inp.value) || 0));
+      splitAmt[id] = round2((splitSalary * pct) / 100);
+      refreshRowsExcept("pct", id);
+      recalcSplit();
+    };
+  });
+
+  // تحريك البار = نسبة المحفظة من الراتب → يحدّث مبلغها
   $("splitList").querySelectorAll("[data-slider]").forEach(s => {
     s.oninput = () => {
       const id = s.dataset.slider;
       const pct = parseFloat(s.value) || 0;
       splitAmt[id] = round2((splitSalary * pct) / 100);
-      const ai = document.querySelector(`[data-amtin="${id}"]`);
-      if (ai) ai.value = splitAmt[id] || "";
-      // الراتب ثابت هنا (نغيّر توزيع محفظة وحدة داخل نفس الراتب)
-      refreshPctsAndSliders(id);
+      refreshRowsExcept("slider", id);
       recalcSplit();
     };
   });
@@ -578,15 +621,17 @@ function renderSplit() {
 
 const sumAmts = () => WALLETS.reduce((s, w) => s + (splitAmt[w.id] || 0), 0);
 
-// حدّث شارات النسبة والأشرطة من المبالغ ÷ الراتب
-function refreshPctsAndSliders(skipSliderId) {
+// حدّث كل صف (مبلغ + نسبة + بار)، ماعدا الحقل اللي المستخدم يكتب فيه
+function refreshRowsExcept(source, skipId) {
   WALLETS.forEach(w => {
     const amt = splitAmt[w.id] || 0;
     const pct = splitSalary ? (amt / splitSalary) * 100 : 0;
-    const badge = $("pctb-" + w.id);
-    if (badge) badge.textContent = round1(pct) + "%";
+    const ai = document.querySelector(`[data-amtin="${w.id}"]`);
+    const pi = document.querySelector(`[data-pctin="${w.id}"]`);
     const sl = document.querySelector(`[data-slider="${w.id}"]`);
-    if (sl && w.id !== skipSliderId) sl.value = pct;
+    if (ai && !(source === "amt" && w.id === skipId)) ai.value = round2(amt) || "";
+    if (pi && !(source === "pct" && w.id === skipId)) pi.value = round1(pct) || "";
+    if (sl && !(source === "slider" && w.id === skipId)) sl.value = pct;
   });
 }
 
@@ -595,16 +640,13 @@ $("salaryInput").addEventListener("input", () => {
   const newSalary = parseFloat($("salaryInput").value) || 0;
   const oldTotal = sumAmts();
   if (oldTotal > 0) {
-    // وزّع الراتب الجديد بنفس نسب المبالغ الحالية
     WALLETS.forEach(w => {
       const frac = (splitAmt[w.id] || 0) / oldTotal;
       splitAmt[w.id] = round2(newSalary * frac);
-      const ai = document.querySelector(`[data-amtin="${w.id}"]`);
-      if (ai) ai.value = splitAmt[w.id] || "";
     });
   }
   splitSalary = newSalary;
-  refreshPctsAndSliders();
+  refreshRowsExcept("salary", null);
   recalcSplit();
 });
 

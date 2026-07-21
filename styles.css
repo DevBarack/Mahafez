@@ -241,3 +241,19 @@ h2 .hint{margin-inline-start:auto;order:5}
 .lg-dot{width:11px;height:11px;border-radius:3px;flex:none}
 .lg-name{flex:1;color:var(--ink)}
 .lg-val{color:var(--muted);white-space:nowrap;font-size:.76rem}
+
+/* ═══ صف التوزيع: مبلغ + نسبة ═══ */
+.io{display:flex;gap:8px;margin:8px 0 10px}
+.io-box{flex:1;display:flex;align-items:center;gap:6px;
+  background:#0a1512;border:1px solid var(--line);border-radius:10px;padding:4px 10px}
+.io-box input{flex:1;background:transparent;border:none;outline:none;
+  color:var(--teal);font-size:1.05rem;font-weight:700;font-family:inherit;padding:6px 0;width:100%}
+.io-box input:focus{outline:none}
+.io-box label{font-size:.72rem;color:var(--dim);flex:none}
+
+/* ═══ قائمة تصنيف العملية ═══ */
+.tx .tx-wallet{
+  margin-top:4px;background:#0a1512;border:1px solid var(--line);border-radius:8px;
+  color:var(--muted);padding:4px 8px;font-size:.72rem;font-family:inherit;max-width:160px;
+}
+.tx .l{min-width:0}
