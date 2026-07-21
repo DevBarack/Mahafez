@@ -156,11 +156,16 @@ function renderWallets() {
   el.innerHTML = WALLETS.map(w => {
     const bal = w.balance || 0, bud = w.budget || 1;
     const spent = spentMap[w.id] || 0;
-    const pct = Math.max(0, Math.min(100, (bal / bud) * 100));
-    const cls = bal < 0 ? "over" : pct < 25 ? "low" : "";
-    const color = bal < 0 ? "var(--red)" : pct < 25 ? "var(--gold)" : "var(--teal)";
+    // البار = المتبقي من الحد حسب الصرف الفعلي (يبدأ 100% وينقص مع الصرف)
+    const remainPct = Math.max(0, Math.min(100, (1 - spent / bud) * 100));
+    const overBudget = spent > bud;
+    const nearLimit = !overBudget && remainPct < 25;
+    const cls = overBudget ? "over" : nearLimit ? "low" : "";
+    const color = overBudget ? "var(--red)" : nearLimit ? "var(--gold)" : "var(--teal)";
+    // لو تجاوز الحد، نملأ البار كامل بالأحمر
+    const fillPct = overBudget ? 100 : remainPct;
     return `<div class="env tap ${cls}" data-edit="${w.id}" style="color:${color}">
-      <div class="fill" style="inline-size:${pct}%"></div>
+      <div class="fill" style="inline-size:${fillPct}%"></div>
       <div class="top">
         <span class="name">${w.emoji || ""} ${esc(w.name)}</span>
         <span class="bal num">${sar(bal)}</span>
