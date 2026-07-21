@@ -295,11 +295,24 @@ async function deleteTx(tx) {
   await deleteDoc(doc(db, "transactions", tx.id));
 }
 
+// ═══ حساب الصرف لكل محفظة من سجل العمليات (نفس مصدر الشريط العلوي، يحترم آخر تصفير) ═══
+function spentByWalletFromTx() {
+  const doneTx = TX.filter(t => t.status === "done");
+  const afterReset = txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+  const map = {}; // walletId -> مجموع
+  afterReset.forEach(t => { if (t.wallet) map[t.wallet] = (map[t.wallet] || 0) + (t.amount || 0); });
+  return map;
+}
+
 function renderReport() {
-  const max = Math.max(...WALLETS.map(w => w.spent || 0), 1);
-  const sorted = [...WALLETS].sort((a, b) => (b.spent || 0) - (a.spent || 0)).filter(w => (w.spent || 0) > 0);
+  const spentMap = spentByWalletFromTx();
+  const max = Math.max(...WALLETS.map(w => spentMap[w.id] || 0), 1);
+  const sorted = [...WALLETS]
+    .map(w => ({ ...w, _spent: spentMap[w.id] || 0 }))
+    .sort((a, b) => b._spent - a._spent)
+    .filter(w => w._spent > 0);
   $("report").innerHTML = sorted.length ? sorted.map(w => {
-    const s = w.spent || 0, bud = w.budget || 1;
+    const s = w._spent, bud = w.budget || 1;
     const over = s > bud;
     return `<div class="rep">
       <div class="l"><span>${w.emoji || ""} ${w.name}</span><span class="num" style="color:${over ? "var(--red)" : "var(--muted)"}">${money(s)} / ${money(bud)}</span></div>
@@ -315,11 +328,13 @@ function renderWalletChart() {
   const host = $("walletChart");
   if (!host) return;
 
-  // جهّز البيانات: المحافظ اللي صُرف منها، مرتّبة تنازلي
+  // البيانات من سجل العمليات (يطابق تفصيل الصرف والشريط العلوي)
+  const spentMap = spentByWalletFromTx();
   const spentWallets = WALLETS
-    .filter(w => (w.spent || 0) > 0)
-    .sort((a, b) => (b.spent || 0) - (a.spent || 0));
-  const totalSpent = spentWallets.reduce((s, w) => s + (w.spent || 0), 0);
+    .map(w => ({ ...w, _spent: spentMap[w.id] || 0 }))
+    .filter(w => w._spent > 0)
+    .sort((a, b) => b._spent - a._spent);
+  const totalSpent = spentWallets.reduce((s, w) => s + w._spent, 0);
 
   if (!spentWallets.length || totalSpent <= 0) {
     host.innerHTML = `<div class="empty">ما صرفت شي بعد</div>`;
@@ -332,7 +347,7 @@ function renderWalletChart() {
   let segments = "";
   let legend = "";
   spentWallets.forEach((w, i) => {
-    const val = w.spent || 0;
+    const val = w._spent;
     const frac = val / totalSpent;
     const len = frac * C;
     const color = CHART_COLORS[i % CHART_COLORS.length];
