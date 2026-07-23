@@ -241,10 +241,14 @@ function renderUnparsed() {
 }
 
 function renderTx() {
+  // لو المستخدم يكتب في خانة اسم، لا تعيد الرسم الحين (حماية كتابته من الضياع)
+  const active = document.activeElement;
+  if (active && active.dataset && active.dataset.mname) return;
   const done = TX.filter(t => t.status === "done");
   $("txList").innerHTML = done.length ? done.map(t => `
     <div class="tx">
-      <div class="l"><div class="m">${esc(t.merchant || "—")}</div>
+      <div class="l">
+        <input class="m m-edit num-off" data-mname="${t.id}" value="${esc(t.merchant || "")}" placeholder="اسم العملية" />
         <select class="tx-wallet" data-reassign="${t.id}">
           ${WALLETS.map(w => `<option value="${w.id}" ${w.id === t.wallet ? "selected" : ""}>${w.emoji || ""} ${esc(w.name)}</option>`).join("")}
         </select>
@@ -255,6 +259,17 @@ function renderTx() {
         <button class="del" data-del="${t.id}">حذف</button>
       </div>
     </div>`).join("") : `<div class="empty">ما فيه عمليات بعد</div>`;
+  // تعديل اسم العملية: يحفظ عند الخروج من الخانة أو Enter
+  $("txList").querySelectorAll("[data-mname]").forEach(inp => {
+    const save = async () => {
+      const tx = TX.find(t => t.id === inp.dataset.mname);
+      const newName = inp.value.trim();
+      if (!tx || newName === (tx.merchant || "") || !newName) { inp.value = tx?.merchant || ""; return; }
+      await updateDoc(doc(db, "transactions", tx.id), { merchant: newName });
+    };
+    inp.onblur = save;
+    inp.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } };
+  });
   $("txList").querySelectorAll("[data-undo]").forEach(b => {
     b.onclick = () => undo(TX.find(t => t.id === b.dataset.undo));
   });
@@ -553,10 +568,11 @@ $("addBtn").onclick = async () => {
   const merch = $("aMerch").value.trim();
   const wid = $("aWallet").value;
   if (!amt || amt <= 0) { $("addErr").textContent = "اكتب مبلغ صحيح"; return; }
+  if (!merch) { $("addErr").textContent = "اكتب اسم العملية"; return; }
   if (!wid) { $("addErr").textContent = "اختر محفظة"; return; }
   const w = WALLETS.find(x => x.id === wid);
   const ref = await addDoc(collection(db, "transactions"), {
-    amount: amt, merchant: merch || "يدوي", wallet: wid, walletName: w.name,
+    amount: amt, merchant: merch, wallet: wid, walletName: w.name,
     status: "done", source: "manual", createdAt: serverTimestamp()
   });
   await updateDoc(doc(db, "wallets", wid), { balance: increment(-amt), spent: increment(amt) });

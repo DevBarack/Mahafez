@@ -359,3 +359,11 @@ select{
   .page.on .env,.page.on .chart-card,.page.on .split-row,.page.on .merch,
   .page.on .rep,.page.on .tx,.page.on .rep-stats,.page.on .strip,.hero .v{animation:none}
 }
+
+/* خانة اسم العملية القابلة للتعديل */
+.m-edit{
+  background:transparent;border:none;border-bottom:1px dashed transparent;
+  color:var(--ink);font-weight:500;font-size:.88rem;font-family:inherit;
+  padding:0 0 2px;width:100%;max-width:170px;
+}
+.m-edit:focus{outline:none;border-bottom-color:var(--teal);background:rgba(47,169,138,.06)}
