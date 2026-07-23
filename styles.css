@@ -367,3 +367,8 @@ select{
   padding:0 0 2px;width:100%;max-width:170px;
 }
 .m-edit:focus{outline:none;border-bottom-color:var(--teal);background:rgba(47,169,138,.06)}
+
+/* خانة التاريخ بالثيم الداكن */
+input[type="date"]{color-scheme:dark;min-height:46px}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.7) sepia(.3) saturate(2) hue-rotate(110deg);cursor:pointer}
+.field label .hint{font-size:.62rem;color:var(--dim);font-weight:400;margin-inline-start:6px}

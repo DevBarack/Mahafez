@@ -6,7 +6,7 @@ import {
 import {
   getFirestore, collection, doc, getDocs, getDoc, setDoc, addDoc,
   updateDoc, deleteDoc, query, where, orderBy, limit, onSnapshot,
-  serverTimestamp, increment, writeBatch
+  serverTimestamp, increment, writeBatch, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, AUTH_EMAIL } from "./firebase-config.js";
 
@@ -567,17 +567,26 @@ $("addBtn").onclick = async () => {
   const amt = parseFloat($("aAmt").value);
   const merch = $("aMerch").value.trim();
   const wid = $("aWallet").value;
+  const dateStr = $("aDate").value; // YYYY-MM-DD أو فاضي
   if (!amt || amt <= 0) { $("addErr").textContent = "اكتب مبلغ صحيح"; return; }
   if (!merch) { $("addErr").textContent = "اكتب اسم العملية"; return; }
   if (!wid) { $("addErr").textContent = "اختر محفظة"; return; }
+  // تاريخ مخصص → نخزّنه (12 ظهراً محلياً عشان ما ينزاح ليوم ثاني بفروقات التوقيت)
+  let createdAt = serverTimestamp();
+  if (dateStr) {
+    const d = new Date(dateStr + "T12:00:00");
+    if (isNaN(d)) { $("addErr").textContent = "التاريخ غير صحيح"; return; }
+    if (d > new Date()) { $("addErr").textContent = "التاريخ في المستقبل!"; return; }
+    createdAt = Timestamp.fromDate(d);
+  }
   const w = WALLETS.find(x => x.id === wid);
   const ref = await addDoc(collection(db, "transactions"), {
     amount: amt, merchant: merch, wallet: wid, walletName: w.name,
-    status: "done", source: "manual", createdAt: serverTimestamp()
+    status: "done", source: "manual", createdAt
   });
   await updateDoc(doc(db, "wallets", wid), { balance: increment(-amt), spent: increment(amt) });
   if (merch) await setDoc(doc(db, "merchants", norm(merch)), { wallet: wid, merchant: merch, updatedAt: serverTimestamp() });
-  $("aAmt").value = ""; $("aMerch").value = "";
+  $("aAmt").value = ""; $("aMerch").value = ""; $("aDate").value = "";
   $("addErr").style.color = "var(--teal)"; $("addErr").textContent = "تسجّلت ✓";
   setTimeout(() => { $("addErr").textContent = ""; $("addErr").style.color = "var(--red)"; }, 1600);
 };
