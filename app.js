@@ -66,14 +66,49 @@ function listen() {
 // الشورت كت يرسل النص الخام، والتطبيق يقسّمه هنا
 function parseSMS(raw) {
   if (!raw) return null;
+
+  // ═ صفر) استرجاع/إلغاء = فلوس راجعة، مو مصروف → نتجاهلها (skip)
+  if (/استرجاع|استرداد|عكس عملية|إلغاء عملية/.test(raw)) return { skip: true };
+
+  let amount = null, merchant = null;
+
+  // ═ ١) ساب (SAB): "لدى MERCHANT بمبلغ CUR X.XX" — للدولي ناخذ الإجمالي بالريال (شامل الرسوم)
+  const sabM = raw.match(/لدى\s+([^\n]+?)\s+بمبلغ\s+([A-Z]{3})\s*([\d,]+(?:\.\d{1,2})?)/);
+  if (sabM) {
+    merchant = sabM[1].trim();
+    const cur = sabM[2];
+    if (cur === "SAR") {
+      amount = parseFloat(sabM[3].replace(/,/g, ""));
+    } else {
+      // عملة أجنبية → الإجمالي بالريال (مع الرسوم الدولية)، وإلا المبلغ بالريال
+      const totM = raw.match(/المبلغ الإجمالي بالريال[:\s]*([\d,]+(?:\.\d{1,2})?)/) ||
+                   raw.match(/المبلغ بالريال[:\s]*([\d,]+(?:\.\d{1,2})?)/);
+      if (totM) amount = parseFloat(totM[1].replace(/,/g, ""));
+    }
+    // بطاقة ساب (مثلاً 2143) — نصنّفها ائتمانية
+    const sabCard = raw.match(/\((\d{4})\)/);
+    if (amount && merchant) return { amount, merchant, card: sabCard ? "sab-" + sabCard[1] : "sab" };
+  }
+
+  // ═ ٢) إنماء - صيغة "شراء عبر: POS ... مبلغ: SAR X لدى: MERCHANT في: ..."
+  const posM = raw.match(/مبلغ[:\s]*SAR\s*([\d,]+(?:\.\d{1,2})?)[\s\S]*?لدى[:\s]+([^\n]+?)(?:\s+في[:\s]|\n|$)/);
+  if (posM) {
+    amount = parseFloat(posM[1].replace(/,/g, ""));
+    merchant = posM[2].trim().replace(/\s*-\s*SA$/, "");
+    const cardM0 = raw.match(/(\d{4})\*{0,2}(?:\s|$)/) || raw.match(/\*{1,2}(\d{4})/);
+    const card = cardM0 ? (cardM0[1] === "7497" ? "visa" : "mada") : "";
+    if (amount && merchant) return { amount, merchant, card };
+  }
+
+  // ═ ٣) الصيغ القديمة (مدى نقاط بيع / ائتمانية POS بـ"من")
   const amtM = raw.match(/SAR\s*([\d,]+(?:\.\d{1,2})?)/) ||
-                raw.match(/([\d,]+(?:\.\d{1,2})?)\s*SAR/) ||
+               raw.match(/([\d,]+(?:\.\d{1,2})?)\s*SAR/) ||
                raw.match(/مبلغ\s*([\d,]+(?:\.\d{1,2})?)/) ||
                raw.match(/بيع\s*([\d,]+(?:\.\d{1,2})?)/);
   const merM = raw.match(/من\s+(?!حساب)([^\n]+?)(?:\s+في|\s+-\s+SA|\n|$)/);
   const cardM = raw.match(/بطاقة[^\d]*(\d{4})/);
-  const amount = amtM ? parseFloat(amtM[1].replace(/,/g, "")) : null;
-  const merchant = merM ? merM[1].trim() : null;
+  amount = amtM ? parseFloat(amtM[1].replace(/,/g, "")) : null;
+  merchant = merM ? merM[1].trim() : null;
   const card = cardM ? (cardM[1] === "7497" ? "visa" : "mada") : "";
   if (!amount || !merchant) return null;
   return { amount, merchant, card };
@@ -85,7 +120,10 @@ async function autoSort() {
   const rawOnes = TX.filter(t => t.status === "raw");
   for (const t of rawOnes) {
     const parsed = parseSMS(t.raw);
-    if (parsed) {
+    if (parsed?.skip) {
+      // استرجاع/إلغاء — مو مصروف، نحذفها من السجل
+      await deleteDoc(doc(db, "transactions", t.id));
+    } else if (parsed) {
       await updateDoc(doc(db, "transactions", t.id), {
         amount: parsed.amount, merchant: parsed.merchant,
         card: parsed.card, status: "pending"
