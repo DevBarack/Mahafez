@@ -1057,7 +1057,7 @@ $("applyRefillBtn").onclick = async () => {
     $("applyRefillBtn").textContent = "⚠️ اضغط مرة ثانية للتأكيد";
     $("applyRefillBtn").style.background = "var(--gold)";
     $("splitMsg").style.color = "var(--muted)";
-    $("splitMsg").textContent = "بيحدّث ميزانيات المحافظ ويعبّي الأرصدة (ما يمس عدّاد الصرف)";
+    $("splitMsg").textContent = "بيحدّث الحدود، والرصيد = الحد الجديد ناقص المصروف الفعلي";
     clearTimeout(refillTimer);
     refillTimer = setTimeout(() => {
       refillArmed = false;
@@ -1075,15 +1075,17 @@ $("applyRefillBtn").onclick = async () => {
   try {
     const salary = await applySplitCore();
     if (salary !== null) {
+      // ذكاء: الرصيد الجديد = الحد الجديد − المصروف الفعلي من سجل العمليات
+      const spentMap = spentByWalletFromTx();
       const batch = writeBatch(db);
       WALLETS.forEach(w => {
-        const newBudget = Math.round((salary * (splitPct[w.id] || 0)) / 100 * 100) / 100;
-        // نحدّث الميزانية ونعبّي الرصيد — بدون ما نلمس spent (عدّاد الصرف منفصل)
-        batch.update(doc(db, "wallets", w.id), { balance: newBudget });
+        const newBudget = round2(splitAmt[w.id] || 0);
+        const spent = spentMap[w.id] || 0;
+        batch.update(doc(db, "wallets", w.id), { balance: round2(newBudget - spent) });
       });
       await batch.commit();
       $("splitMsg").style.color = "var(--teal)";
-      $("splitMsg").textContent = "تم ✓ — المحافظ اتحدّثت بالتوزيع الجديد";
+      $("splitMsg").textContent = "تم ✓ — حدّثت الحدود وخصمت المصروف السابق من الأرصدة";
       setTimeout(() => { $("splitMsg").textContent = ""; }, 4500);
     }
   } catch (e) {
