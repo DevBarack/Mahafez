@@ -372,3 +372,26 @@ select{
 input[type="date"]{color-scheme:dark;min-height:46px}
 input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.7) sepia(.3) saturate(2) hue-rotate(110deg);cursor:pointer}
 .field label .hint{font-size:.62rem;color:var(--dim);font-weight:400;margin-inline-start:6px}
+
+/* ═══ نطاق الفترة اليومي + الاختصارات ═══ */
+.range-row{display:flex;align-items:center;gap:8px}
+.range-row input[type=date]{flex:1;min-width:0}
+.range-sep{color:var(--dim);flex:none}
+.chips{display:flex;gap:8px;margin-top:10px}
+.chip{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--dim);
+  border-radius:99px;padding:8px 6px;font-size:.72rem;font-weight:600;font-family:inherit;cursor:pointer}
+.chip.on{background:var(--surface2);color:var(--teal);border-color:var(--teal)}
+
+/* ملف CSV */
+#csvFile{width:100%;background:var(--surface);border:1px dashed var(--line);border-radius:12px;
+  color:var(--muted);padding:14px;font-family:inherit;font-size:.8rem;box-sizing:border-box}
+#repTools{margin-top:8px}
+
+/* ═══ طباعة التقرير (PDF بالرسومات) ═══ */
+@media print{
+  body{background:var(--bg)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:10px}
+  nav,header,#unparsedWrap,#reviewWrap,.chips,#repTools,.field{display:none!important}
+  .page{display:none!important}
+  #p-rep.on{display:block!important}
+  .chart-card,.rep-stats div{break-inside:avoid}
+}

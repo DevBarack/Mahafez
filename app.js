@@ -57,7 +57,7 @@ function listen() {
   }));
   unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(150)), snap => {
     TX = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderReview(); renderUnparsed(); renderTx(); renderWallets(); buildMonthPicker(); renderReportAll(); renderStrip();
+    renderReview(); renderUnparsed(); renderTx(); renderWallets(); renderReportAll(); renderStrip();
     autoSort();
   }));
 }
@@ -369,46 +369,164 @@ function spentByWalletFromTx() {
   return map;
 }
 
-// ═══ التقرير الشهري: اختيار الفترة ═══
-let repPeriod = "current"; // "current" أو "YYYY-MM"
+// ═══ التقرير: الفترة بنطاق يومي (من/إلى) — فاضية = الفترة الحالية ═══
+let repFrom = null, repTo = null; // Date أو null
 
 // عمليات الفترة المختارة
 function txForPeriod() {
   const doneTx = TX.filter(t => t.status === "done");
-  if (repPeriod === "current") {
+  if (!repFrom && !repTo) {
+    // الفترة الحالية (منذ آخر تصفير)
     return txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
   }
-  // شهر معيّن: فلترة بتاريخ العملية
-  const [y, m] = repPeriod.split("-").map(Number);
+  const from = repFrom ? new Date(repFrom.getFullYear(), repFrom.getMonth(), repFrom.getDate(), 0, 0, 0) : null;
+  const to = repTo ? new Date(repTo.getFullYear(), repTo.getMonth(), repTo.getDate(), 23, 59, 59) : null;
   return doneTx.filter(t => {
     const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
-    return d && d.getFullYear() === y && (d.getMonth() + 1) === m;
+    if (!d) return false;
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
   });
 }
 
-// ابنِ قائمة الأشهر من تواريخ العمليات الفعلية
-function buildMonthPicker() {
-  const sel = $("repMonth");
-  if (!sel) return;
-  const months = new Set();
-  TX.filter(t => t.status === "done").forEach(t => {
-    const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
-    if (d) months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-  });
-  const sorted = [...months].sort().reverse(); // الأحدث أول
-  const monthName = (ym) => {
-    const [y, m] = ym.split("-").map(Number);
-    return new Date(y, m - 1, 1).toLocaleDateString("ar-SA-u-ca-gregory", { month: "long", year: "numeric" });
-  };
-  const cur = sel.value || "current";
-  sel.innerHTML = `<option value="current">الفترة الحالية (منذ آخر تصفير)</option>` +
-    sorted.map(ym => `<option value="${ym}">${monthName(ym)}</option>`).join("");
-  sel.value = [...sel.options].some(o => o.value === cur) ? cur : "current";
-  sel.onchange = () => {
-    repPeriod = sel.value;
-    renderReportAll();
-  };
+// ربط حقول التاريخ والاختصارات
+function setChip(id) {
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  if (id) $(id)?.classList.add("on");
 }
+function syncDateInputs() {
+  const f = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "";
+  if ($("repFrom")) $("repFrom").value = f(repFrom);
+  if ($("repTo")) $("repTo").value = f(repTo);
+}
+if ($("repFrom")) $("repFrom").oninput = () => { repFrom = $("repFrom").value ? new Date($("repFrom").value + "T12:00:00") : null; setChip(null); renderReportAll(); };
+if ($("repTo")) $("repTo").oninput = () => { repTo = $("repTo").value ? new Date($("repTo").value + "T12:00:00") : null; setChip(null); renderReportAll(); };
+if ($("chipCurrent")) $("chipCurrent").onclick = () => { repFrom = repTo = null; syncDateInputs(); setChip("chipCurrent"); renderReportAll(); };
+if ($("chipMonth")) $("chipMonth").onclick = () => {
+  const now = new Date();
+  repFrom = new Date(now.getFullYear(), now.getMonth(), 1); repTo = now;
+  syncDateInputs(); setChip("chipMonth"); renderReportAll();
+};
+if ($("chip7")) $("chip7").onclick = () => {
+  const now = new Date();
+  repFrom = new Date(now.getTime() - 6 * 86400000); repTo = now;
+  syncDateInputs(); setChip("chip7"); renderReportAll();
+};
+
+// ═══ تصدير CSV للفترة المحددة (بدون مكتبات — نص خالص مع BOM للعربي) ═══
+const csvCell = (v) => {
+  const s = String(v ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const fmtDateISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+if ($("exportCsvBtn")) $("exportCsvBtn").onclick = () => {
+  const tx = txForPeriod();
+  if (!tx.length) { $("csvMsg").style.color = "var(--red)"; $("csvMsg").textContent = "ما فيه عمليات في هذه الفترة"; return; }
+  const rows = [["التاريخ", "المتجر", "المبلغ", "المحفظة"]];
+  tx.forEach(t => {
+    const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+    const w = WALLETS.find(x => x.id === t.wallet);
+    rows.push([d ? fmtDateISO(d) : "", t.merchant || "", t.amount || 0, w ? w.name : (t.walletName || "")]);
+  });
+  rows.push([]); rows.push(["— ملخص المحافظ —"]); rows.push(["المحفظة", "الصرف", "عدد العمليات"]);
+  const byW = {};
+  tx.forEach(t => { const k = t.wallet; if (!byW[k]) byW[k] = { total: 0, n: 0 }; byW[k].total += t.amount || 0; byW[k].n++; });
+  Object.entries(byW).sort((a, b) => b[1].total - a[1].total).forEach(([id, d]) => {
+    const w = WALLETS.find(x => x.id === id);
+    rows.push([w ? w.name : "غير مصنّفة", Math.round(d.total * 100) / 100, d.n]);
+  });
+  rows.push([]); rows.push(["— أكثر المتاجر —"]); rows.push(["المتجر", "الصرف", "عدد العمليات"]);
+  const byM = {};
+  tx.forEach(t => { const k = (t.merchant || "؟").trim(); if (!byM[k]) byM[k] = { total: 0, n: 0 }; byM[k].total += t.amount || 0; byM[k].n++; });
+  Object.entries(byM).sort((a, b) => b[1].total - a[1].total).forEach(([name, d]) => {
+    rows.push([name, Math.round(d.total * 100) / 100, d.n]);
+  });
+  const total = tx.reduce((s, t) => s + (t.amount || 0), 0);
+  rows.push([]); rows.push(["الإجمالي", Math.round(total * 100) / 100, tx.length + " عملية"]);
+
+  const csv = "\ufeff" + rows.map(r => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const tag = repFrom || repTo ? `${repFrom ? fmtDateISO(repFrom) : "بداية"}_${repTo ? fmtDateISO(repTo) : "اليوم"}` : "الفترة-الحالية";
+  a.download = `محافظي-${tag}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  $("csvMsg").style.color = "var(--teal)"; $("csvMsg").textContent = `نزّلت ${tx.length} عملية ✓`;
+  setTimeout(() => { $("csvMsg").textContent = ""; }, 3000);
+};
+
+// ═══ حفظ التقرير PDF (بالرسومات) — طباعة النظام ═══
+if ($("printBtn")) $("printBtn").onclick = () => window.print();
+
+// ═══ استيراد CSV: معاينة ثم إضافة ═══
+let csvPending = [];
+if ($("csvFile")) $("csvFile").onchange = async () => {
+  $("csvMsg").textContent = ""; $("csvImportBtn").hidden = true; csvPending = [];
+  const file = $("csvFile").files[0];
+  if (!file) return;
+  const text = (await file.text()).replace(/^\ufeff/, "");
+  const first = text.split("\n")[0];
+  const delim = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ";" : ",";
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  let ok = 0, bad = [];
+  lines.forEach((line, i) => {
+    const cells = line.split(delim).map(c => c.trim().replace(/^"|"$/g, ""));
+    if (cells.length < 4) { if (line.trim()) bad.push(i + 1); return; }
+    const [dateS, merch, amtS, wName] = cells;
+    if (/تاريخ|date/i.test(dateS)) return; // سطر العناوين
+    let d = null;
+    let m1 = dateS.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    let m2 = dateS.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m1) d = new Date(+m1[1], +m1[2] - 1, +m1[3], 12);
+    else if (m2) d = new Date(+m2[3], +m2[2] - 1, +m2[1], 12);
+    // ارفض التواريخ المتدحرجة (يوم 99 يصير شهر ثاني) والمستقبلية
+    if (d) {
+      const [yy, mm, dd] = m1 ? [+m1[1], +m1[2], +m1[3]] : [+m2[3], +m2[2], +m2[1]];
+      if (d.getFullYear() !== yy || d.getMonth() + 1 !== mm || d.getDate() !== dd || d > new Date()) d = null;
+    }
+    const amt = parseFloat(String(amtS).replace(/,/g, ""));
+    const w = WALLETS.find(x => norm(x.name) === norm(wName) || norm(`${x.emoji} ${x.name}`) === norm(wName));
+    if (!d || isNaN(d) || !amt || amt <= 0 || !merch || !w) { bad.push(i + 1); return; }
+    csvPending.push({ amount: amt, merchant: merch, wallet: w.id, walletName: w.name, date: d });
+    ok++;
+  });
+  if (!ok) {
+    $("csvMsg").style.color = "var(--red)";
+    $("csvMsg").textContent = "ما قدرت أقرأ أي سطر — تأكد من الأعمدة: التاريخ، المتجر، المبلغ، المحفظة (بنفس أسماء محافظك)";
+    return;
+  }
+  $("csvMsg").style.color = "var(--teal)";
+  $("csvMsg").textContent = `جاهز: ${ok} عملية` + (bad.length ? ` — تجاهلت ${bad.length} سطر (${bad.slice(0, 5).join("،")}${bad.length > 5 ? "…" : ""})` : "");
+  $("csvImportBtn").hidden = false;
+  $("csvImportBtn").textContent = `أضف ${ok} عملية`;
+};
+
+if ($("csvImportBtn")) $("csvImportBtn").onclick = async () => {
+  if (!csvPending.length) return;
+  $("csvImportBtn").disabled = true; $("csvImportBtn").textContent = "…";
+  try {
+    // Firestore batch حده 500 — نقسّم لو أكثر
+    for (let i = 0; i < csvPending.length; i += 450) {
+      const batch = writeBatch(db);
+      csvPending.slice(i, i + 450).forEach(p => {
+        const ref = doc(collection(db, "transactions"));
+        batch.set(ref, {
+          amount: p.amount, merchant: p.merchant, wallet: p.wallet, walletName: p.walletName,
+          status: "done", source: "csv", createdAt: Timestamp.fromDate(p.date)
+        });
+      });
+      await batch.commit();
+    }
+    $("csvMsg").style.color = "var(--teal)"; $("csvMsg").textContent = `أضفت ${csvPending.length} عملية ✓`;
+    csvPending = []; $("csvFile").value = ""; $("csvImportBtn").hidden = true;
+  } catch (e) {
+    $("csvMsg").style.color = "var(--red)"; $("csvMsg").textContent = "صار خطأ: " + (e?.message || e);
+  }
+  $("csvImportBtn").disabled = false;
+};
 
 // صرف كل محفظة ضمن الفترة المختارة
 function spentByWalletForPeriod() {

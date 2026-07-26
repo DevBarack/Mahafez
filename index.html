@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="./styles.css?v=19">
+<link rel="stylesheet" href="./styles.css?v=20">
 </head>
 <body>
 
@@ -72,8 +72,17 @@
   <!-- التقرير -->
   <section class="page" id="p-rep">
     <div class="field">
-      <label>الفترة</label>
-      <select id="repMonth"></select>
+      <label>الفترة <span class="hint">حدّدها باليوم — أو اترك الحقلين فاضية للفترة الحالية</span></label>
+      <div class="range-row">
+        <input id="repFrom" type="date" title="من تاريخ">
+        <span class="range-sep">←</span>
+        <input id="repTo" type="date" title="إلى تاريخ">
+      </div>
+      <div class="chips">
+        <button class="chip on" id="chipCurrent">الفترة الحالية</button>
+        <button class="chip" id="chipMonth">هذا الشهر</button>
+        <button class="chip" id="chip7">آخر ٧ أيام</button>
+      </div>
     </div>
     <div class="rep-stats">
       <div><span class="k">إجمالي الصرف</span><span class="v num" id="repTotal">—</span></div>
@@ -91,6 +100,18 @@
     <div id="topMerchants"></div>
     <h2>تفصيل الصرف</h2>
     <div id="report"></div>
+
+    <div id="repTools">
+      <h2>تصدير</h2>
+      <button class="ghost" id="exportCsvBtn">⬇️ تنزيل CSV للفترة المحددة</button>
+      <button class="ghost" id="printBtn" style="margin-top:8px">🖨️ حفظ التقرير PDF (بالرسومات)</button>
+
+      <h2>استيراد عمليات من ملف CSV</h2>
+      <div class="note">جهّز الملف بالأعمدة: <b>التاريخ، المتجر، المبلغ، المحفظة</b> (سطر لكل عملية، بنفس أسماء محافظك). التاريخ بصيغة YYYY-MM-DD أو DD/MM/YYYY. من Excel: حفظ باسم ← CSV.</div>
+      <input type="file" id="csvFile" accept=".csv,text/csv,text/plain">
+      <div class="err" id="csvMsg"></div>
+      <button class="primary" id="csvImportBtn" hidden>أضف العمليات</button>
+    </div>
   </section>
 
   <!-- توزيع الراتب -->
@@ -150,6 +171,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=19"></script>
+<script type="module" src="./app.js?v=20"></script>
 </body>
 </html>
