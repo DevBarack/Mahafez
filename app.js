@@ -74,10 +74,12 @@ function parseSMS(raw) {
 
   // ═ ٠.٥) إنماء الصيغة الجديدة: "شراء POS-ApplePay بـ SAR 66.00 بطاقة ائتمانية *7497 لدى Fastel Fue/SA في ..."
   // المبلغ بعد "بـ SAR" والمتجر بعد "لدى" وينتهي بـ"/SA" أو "في"
-  const newM = raw.match(/بـ?\s*SAR\s*([\d,]+(?:\.\d{1,2})?)[\s\S]*?لدى\s+([^\n]+?)(?:\s*\/\s*SA\b|\s+في[:\s]|\n|$)/);
+  const newM = raw.match(/بـ?\s*SAR\s*([\d,]+(?:\.\d{1,2})?)[\s\S]*?لدى\s+([\s\S]+?)(?:\s+في[:\s]|\s+الرصيد|\s+رصيد|$)/);
   if (newM && !/بمبلغ/.test(raw)) { // نستثني صيغة ساب (فيها "بمبلغ")
     amount = parseFloat(newM[1].replace(/,/g, ""));
-    merchant = newM[2].trim().replace(/\*+$/, "").replace(/^\*+/, "").replace(/^SA\s*\/\s*/i, "").trim();
+    merchant = newM[2].replace(/\s+/g, " ").trim()
+      .replace(/\*+$/, "").replace(/^\*+/, "")
+      .replace(/^SA\s*\/\s*/i, "").replace(/\s*\/\s*SA\b\s*$/i, "").trim();
     const cardN = raw.match(/\*+(\d{4})/) || raw.match(/(\d{4})\*+/);
     const card = cardN ? (cardN[1] === "7497" ? "visa" : "mada") : "";
     if (amount && merchant) return { amount, merchant, card };
