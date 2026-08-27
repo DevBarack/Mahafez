@@ -72,6 +72,17 @@ function parseSMS(raw) {
 
   let amount = null, merchant = null;
 
+  // ═ ٠.٥) إنماء الصيغة الجديدة: "شراء POS-ApplePay بـ SAR 66.00 بطاقة ائتمانية *7497 لدى Fastel Fue/SA في ..."
+  // المبلغ بعد "بـ SAR" والمتجر بعد "لدى" وينتهي بـ"/SA" أو "في"
+  const newM = raw.match(/بـ?\s*SAR\s*([\d,]+(?:\.\d{1,2})?)[\s\S]*?لدى\s+([^\n]+?)(?:\s*\/\s*SA\b|\s+في[:\s]|\n|$)/);
+  if (newM && !/بمبلغ/.test(raw)) { // نستثني صيغة ساب (فيها "بمبلغ")
+    amount = parseFloat(newM[1].replace(/,/g, ""));
+    merchant = newM[2].trim().replace(/\*+$/, "").replace(/^\*+/, "").replace(/^SA\s*\/\s*/i, "").trim();
+    const cardN = raw.match(/\*+(\d{4})/) || raw.match(/(\d{4})\*+/);
+    const card = cardN ? (cardN[1] === "7497" ? "visa" : "mada") : "";
+    if (amount && merchant) return { amount, merchant, card };
+  }
+
   // ═ ١) ساب (SAB): "لدى MERCHANT بمبلغ CUR X.XX" — للدولي ناخذ الإجمالي بالريال (شامل الرسوم)
   const sabM = raw.match(/لدى\s+([^\n]+?)\s+بمبلغ\s+([A-Z]{3})\s*([\d,]+(?:\.\d{1,2})?)/);
   if (sabM) {
@@ -195,8 +206,10 @@ function renderWallets() {
   if (!WALLETS.length) { el.innerHTML = `<div class="empty">ما فيه محافظ بعد — أضف وحدة بالزر تحت</div>`; return; }
   const spentMap = spentByWalletFromTx(); // نفس مصدر التقرير والشريط العلوي
   el.innerHTML = WALLETS.map(w => {
-    const bal = w.balance || 0, bud = w.budget || 1;
+    const bud = w.budget || 1;
     const spent = spentMap[w.id] || 0;
+    // الرصيد يُحسب دايماً = الحد − الصرف الفعلي (مصدر حقيقة واحد، ما ينحرف أبداً)
+    const bal = round2((w.budget || 0) - spent);
     // البار = المتبقي من الحد حسب الصرف الفعلي (يبدأ 100% وينقص مع الصرف)
     const remainPct = Math.max(0, Math.min(100, (1 - spent / bud) * 100));
     const overBudget = spent > bud;
@@ -805,6 +818,33 @@ function closeWalletModal() { $("walletModal").hidden = true; editingWalletId = 
 
 $("addWalletBtn").onclick = () => openWalletModal(null);
 $("mCancelBtn").onclick = closeWalletModal;
+
+// ═══ أعد قراءة العمليات المعلّقة بالمحرّك المحدّث ═══
+if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
+  const unp = TX.filter(t => t.status === "unparsed" && t.raw);
+  if (!unp.length) return;
+  $("retryParseBtn").disabled = true;
+  $("retryParseBtn").textContent = "…";
+  let ok = 0, skipped = 0, still = 0;
+  for (const t of unp) {
+    const parsed = parseSMS(t.raw);
+    if (parsed?.skip) {
+      await deleteDoc(doc(db, "transactions", t.id));
+      skipped++;
+    } else if (parsed) {
+      await updateDoc(doc(db, "transactions", t.id), {
+        amount: parsed.amount, merchant: parsed.merchant,
+        card: parsed.card || "", status: "pending"
+      });
+      ok++;
+    } else {
+      still++;
+    }
+  }
+  $("retryParseBtn").disabled = false;
+  $("retryParseBtn").textContent = `قرأت ${ok}` + (skipped ? ` · تجاهلت ${skipped} استرجاع` : "") + (still ? ` · بقي ${still} يدوي` : " ✓");
+  setTimeout(() => { $("retryParseBtn").textContent = "🔄 أعد قراءتها بالمحرّك المحدّث"; }, 5000);
+};
 
 // ═══ تصفير العدّادات (عدّاد العمليات العلوي + عدّاد الصرف في المحافظ) ═══
 // ما يمس سجل العمليات — التواريخ محفوظة للتقارير
