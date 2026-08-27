@@ -76,15 +76,20 @@ function parseSMS(raw) {
 
   // ═ ٠.٥) إنماء الصيغة الجديدة: "شراء POS-ApplePay بـ SAR 66.00 بطاقة ائتمانية *7497 لدى Fastel Fue/SA في ..."
   // المبلغ بعد "بـ SAR" والمتجر بعد "لدى" وينتهي بـ"/SA" أو "في"
-  const newM = raw.match(/بـ?\s*SAR\s*([\d,]+(?:\.\d{1,2})?)[\s\S]*?لدى\s+([\s\S]+?)(?:\s+في[:\s]|\s+الرصيد|\s+رصيد|$)/);
-  if (newM && !/بمبلغ/.test(raw)) { // نستثني صيغة ساب (فيها "بمبلغ")
-    amount = parseFloat(newM[1].replace(/,/g, ""));
-    merchant = newM[2].replace(/\s+/g, " ").trim()
-      .replace(/\*+$/, "").replace(/^\*+/, "")
-      .replace(/^SA\s*\/\s*/i, "").replace(/\s*\/\s*SA\b\s*$/i, "").trim();
-    const cardN = raw.match(/\*+(\d{4})/) || raw.match(/(\d{4})\*+/);
-    const card = cardN ? (cardN[1] === "7497" ? "visa" : "mada") : "";
-    if (amount && merchant) return { amount, merchant, card };
+  // المبلغ: أولوية للترتيب المقلوب (iOS يقلب: "67.73 بـ SAR")، وإلا "SAR 67.73" بحارس ضد رقم البطاقة
+  if (!/بمبلغ/.test(raw)) { // نستثني صيغة ساب (فيها "بمبلغ")
+    const aM = raw.match(/([\d,]+(?:\.\d{1,2})?)\s*بـ?\s*SAR/) ||
+               raw.match(/SAR\s*([\d,]+(?:\.\d{1,2})?)(?![\d,*])/);
+    const mM = raw.match(/لدى[:\s]+([\s\S]+?)(?:\s+في[:\s]|\s+الرصيد|\s+رصيد|$)/);
+    if (aM && mM) {
+      amount = parseFloat(aM[1].replace(/,/g, ""));
+      merchant = mM[1].replace(/\s+/g, " ").trim()
+        .replace(/\*+$/, "").replace(/^\*+/, "")
+        .replace(/^SA\s*\/\s*/i, "").replace(/\s*\/\s*SA\b\s*$/i, "").trim();
+      const cardN = raw.match(/\*+(\d{4})/) || raw.match(/(\d{4})\*+/);
+      const card = cardN ? (cardN[1] === "7497" ? "visa" : "mada") : "";
+      if (amount && merchant) return { amount, merchant, card };
+    }
   }
 
   // ═ ١) ساب (SAB): "لدى MERCHANT بمبلغ CUR X.XX" — للدولي ناخذ الإجمالي بالريال (شامل الرسوم)
