@@ -66,6 +66,8 @@ function listen() {
 // الشورت كت يرسل النص الخام، والتطبيق يقسّمه هنا
 function parseSMS(raw) {
   if (!raw) return null;
+  // تعقيم: شِل رموز الاتجاه المخفية (RTL/LTR marks) اللي يحشرها iOS في الرسائل المخلوطة
+  raw = raw.replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "").replace(/\u00a0/g, " ");
 
   // ═ صفر) استرجاع/إلغاء = فلوس راجعة، مو مصروف → نتجاهلها (skip)
   if (/استرجاع|استرداد|عكس عملية|إلغاء عملية/.test(raw)) return { skip: true };
@@ -827,7 +829,7 @@ if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
   if (!unp.length) return;
   $("retryParseBtn").disabled = true;
   $("retryParseBtn").textContent = "…";
-  let ok = 0, skipped = 0, still = 0;
+  let ok = 0, skipped = 0, still = 0, firstFail = null;
   for (const t of unp) {
     const parsed = parseSMS(t.raw);
     if (parsed?.skip) {
@@ -841,10 +843,17 @@ if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
       ok++;
     } else {
       still++;
+      if (!firstFail) firstFail = t.raw;
     }
   }
   $("retryParseBtn").disabled = false;
   $("retryParseBtn").textContent = `قرأت ${ok}` + (skipped ? ` · تجاهلت ${skipped} استرجاع` : "") + (still ? ` · بقي ${still} يدوي` : " ✓");
+  // تشخيص: اعرض أول رسالة فاشلة بصيغة تكشف الرموز المخفية
+  if (still && firstFail) {
+    let d = document.getElementById("parseDebug");
+    if (!d) { d = document.createElement("div"); d.id = "parseDebug"; d.style.cssText = "font-size:.6rem;color:var(--dim);direction:ltr;text-align:left;word-break:break-all;margin:8px 0;padding:8px;background:#0a1512;border-radius:8px"; $("retryParseBtn").after(d); }
+    d.textContent = "DEBUG: " + JSON.stringify(firstFail.slice(0, 200));
+  }
   setTimeout(() => { $("retryParseBtn").textContent = "🔄 أعد قراءتها بالمحرّك المحدّث"; }, 5000);
 };
 
