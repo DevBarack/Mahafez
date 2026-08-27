@@ -76,11 +76,16 @@ function parseSMS(raw) {
 
   // ═ ٠.٥) إنماء الصيغة الجديدة: "شراء POS-ApplePay بـ SAR 66.00 بطاقة ائتمانية *7497 لدى Fastel Fue/SA في ..."
   // المبلغ بعد "بـ SAR" والمتجر بعد "لدى" وينتهي بـ"/SA" أو "في"
-  // المبلغ: أولوية للترتيب المقلوب (iOS يقلب: "67.73 بـ SAR")، وإلا "SAR 67.73" بحارس ضد رقم البطاقة
-  if (!/بمبلغ/.test(raw)) { // نستثني صيغة ساب (فيها "بمبلغ")
-    const aM = raw.match(/([\d,]+(?:\.\d{1,2})?)\s*بـ?\s*SAR/) ||
-               raw.match(/SAR\s*([\d,]+(?:\.\d{1,2})?)(?![\d,*])/);
-    const mM = raw.match(/لدى[:\s]+([\s\S]+?)(?:\s+في[:\s]|\s+الرصيد|\s+رصيد|$)/);
+  // ═ ٠.٥) إنماء الحديثة — استخراج بالحذف: شِل التاريخ/الوقت ثم الرصيد ثم البطاقة؛ الباقي هو المبلغ (أي ترتيب)
+  if (!/بمبلغ/.test(raw)) {
+    let t = raw
+      .replace(/\d{1,2}:\d{2}(?::\d{2})?/g, " ")                              // الوقت
+      .replace(/\d{2,4}-\d{1,2}-\d{2,4}/g, " ")                               // التاريخ
+      .replace(/[\d,]+(?:\.\d{1,2})?\s*(?:ال)?رصيد/g, " ")                    // "16,732.48 رصيد"
+      .replace(/(?:ال)?رصيد\s*:?\s*(?:SAR\s*)?[\d,]+(?:\.\d{1,2})?/g, " ")  // "الرصيد: 16,732.48"
+      .replace(/\*+\s*\d{4}|\d{4}\s*\*+/g, " ");                            // رقم البطاقة
+    const aM = t.match(/([\d,]+\.\d{1,2})/) || t.match(/(?:^|[^\d,.])([1-9]\d{0,5})(?![\d,.])/);
+    const mM = t.match(/لدى[:\s]+([\s\S]+?)(?:\s+في(?=[:\s]|$)|\s*$)/);
     if (aM && mM) {
       amount = parseFloat(aM[1].replace(/,/g, ""));
       merchant = mM[1].replace(/\s+/g, " ").trim()
@@ -88,7 +93,7 @@ function parseSMS(raw) {
         .replace(/^SA\s*\/\s*/i, "").replace(/\s*\/\s*SA\b\s*$/i, "").trim();
       const cardN = raw.match(/\*+(\d{4})/) || raw.match(/(\d{4})\*+/);
       const card = cardN ? (cardN[1] === "7497" ? "visa" : "mada") : "";
-      if (amount && merchant) return { amount, merchant, card };
+      if (amount && merchant && merchant.length > 1) return { amount, merchant, card };
     }
   }
 
@@ -857,7 +862,11 @@ if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
   if (still && firstFail) {
     let d = document.getElementById("parseDebug");
     if (!d) { d = document.createElement("div"); d.id = "parseDebug"; d.style.cssText = "font-size:.6rem;color:var(--dim);direction:ltr;text-align:left;word-break:break-all;margin:8px 0;padding:8px;background:#0a1512;border-radius:8px"; $("retryParseBtn").after(d); }
-    d.textContent = "DEBUG: " + JSON.stringify(firstFail.slice(0, 200));
+    const esc200 = [...firstFail.slice(0,160)].map(c => {
+      const cp = c.codePointAt(0);
+      return (cp >= 0x20 && cp < 0x7f) || (cp >= 0x0600 && cp <= 0x06ff) ? c : "\\u" + cp.toString(16).padStart(4,"0");
+    }).join("");
+    d.textContent = "DEBUG v28: " + esc200;
   }
   setTimeout(() => { $("retryParseBtn").textContent = "🔄 أعد قراءتها بالمحرّك المحدّث"; }, 5000);
 };
