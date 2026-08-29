@@ -198,12 +198,24 @@ async function undo(tx) {
 
 // ═══ RENDER ═══
 // العدّاد والصرف توأم: يُحسبان من سجل العمليات، ويحترمان آخر تصفير (خط الأساس)
-let txBaseline = 0; // عدد العمليات المكتملة وقت آخر تصفير
+let txBaseline = 0; // (قديم) عدد العمليات وقت آخر تصفير — للتوافق الرجعي
+let cycleStart = null; // (جديد) تاريخ بداية الدورة الحالية — له الأولوية لو موجود
+
+// عمليات الدورة الحالية: بالتاريخ لو فيه cycleStart، وإلا بالعدّاد القديم
+function inCurrentCycle(doneTx) {
+  if (cycleStart) {
+    return doneTx.filter(t => {
+      const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
+      return d && d >= cycleStart;
+    });
+  }
+  return txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+}
 
 function renderStrip() {
   // العمليات المكتملة بعد آخر تصفير
   const doneTx = TX.filter(t => t.status === "done");
-  const afterReset = txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+  const afterReset = inCurrentCycle(doneTx);
   const spent = afterReset.reduce((s, t) => s + (t.amount || 0), 0);
   // مبلغ الشهر الثابت = الراتب المحفوظ في التوزيع (أو مجموع الحدود لو ما فيه راتب)
   const salary = splitSalary || WALLETS.reduce((s, w) => s + (w.budget || 0), 0);
@@ -390,7 +402,7 @@ async function deleteTx(tx) {
 // ═══ حساب الصرف لكل محفظة من سجل العمليات (نفس مصدر الشريط العلوي، يحترم آخر تصفير) ═══
 function spentByWalletFromTx() {
   const doneTx = TX.filter(t => t.status === "done");
-  const afterReset = txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+  const afterReset = inCurrentCycle(doneTx);
   const map = {}; // walletId -> مجموع
   afterReset.forEach(t => { if (t.wallet) map[t.wallet] = (map[t.wallet] || 0) + (t.amount || 0); });
   return map;
@@ -404,7 +416,7 @@ function txForPeriod() {
   const doneTx = TX.filter(t => t.status === "done");
   if (!repFrom && !repTo) {
     // الفترة الحالية (منذ آخر تصفير)
-    return txBaseline > 0 ? doneTx.slice(0, Math.max(0, doneTx.length - txBaseline)) : doneTx;
+    return inCurrentCycle(doneTx);
   }
   const from = repFrom ? new Date(repFrom.getFullYear(), repFrom.getMonth(), repFrom.getDate(), 0, 0, 0) : null;
   const to = repTo ? new Date(repTo.getFullYear(), repTo.getMonth(), repTo.getDate(), 23, 59, 59) : null;
@@ -871,6 +883,44 @@ if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
   setTimeout(() => { $("retryParseBtn").textContent = "🔄 أعد قراءتها بالمحرّك المحدّث"; }, 5000);
 };
 
+// ═══ بدء دورة جديدة من تاريخ محدد: يطبّق التوزيع + يصفّر بالتاريخ ═══
+let cycleArmed = false, cycleTimer = null;
+if ($("newCycleBtn")) $("newCycleBtn").onclick = async () => {
+  const dateStr = $("cycleDate").value;
+  if (!dateStr) { $("newCycleBtn").textContent = "اختر التاريخ أول ⬆️"; setTimeout(() => { $("newCycleBtn").textContent = "ابدأ الدورة الجديدة"; }, 2500); return; }
+  const start = new Date(dateStr + "T00:00:00");
+  if (isNaN(start) || start > new Date()) { $("newCycleBtn").textContent = "تاريخ غير صالح"; setTimeout(() => { $("newCycleBtn").textContent = "ابدأ الدورة الجديدة"; }, 2500); return; }
+  if (!cycleArmed) {
+    cycleArmed = true;
+    $("newCycleBtn").textContent = "⚠️ بيطبّق التوزيع ويبدأ من " + dateStr + " — اضغط للتأكيد";
+    clearTimeout(cycleTimer);
+    cycleTimer = setTimeout(() => { cycleArmed = false; $("newCycleBtn").textContent = "ابدأ الدورة الجديدة"; }, 6000);
+    return;
+  }
+  clearTimeout(cycleTimer); cycleArmed = false;
+  $("newCycleBtn").disabled = true; $("newCycleBtn").textContent = "…";
+  try {
+    // ١) طبّق التوزيع المكتوب في تبويب التوزيع (يحدّث budgets)
+    await applySplitCore();
+    // ٢) خزّن بداية الدورة (بالتاريخ) وصفّر النظام القديم
+    cycleStart = start;
+    await setDoc(doc(db, "settings", "counters"), {
+      cycleStart: Timestamp.fromDate(start), txBaseline: 0, v2: true, updatedAt: serverTimestamp()
+    });
+    // ٣) الصرف والأرصدة مشتقة تلقائياً من الدورة — نصفّر العدّاد المخزّن القديم للنظافة بس
+    const batch = writeBatch(db);
+    WALLETS.forEach(w => batch.update(doc(db, "wallets", w.id), { spent: 0 }));
+    await batch.commit();
+    renderWallets(); renderStrip(); renderReportAll();
+    $("newCycleBtn").textContent = "✓ بدأت الدورة من " + dateStr;
+    setTimeout(() => { $("newCycleBtn").textContent = "ابدأ الدورة الجديدة"; }, 4000);
+  } catch (e) {
+    $("newCycleBtn").textContent = "صار خطأ: " + String(e?.message || e).slice(0, 40);
+    setTimeout(() => { $("newCycleBtn").textContent = "ابدأ الدورة الجديدة"; }, 4000);
+  }
+  $("newCycleBtn").disabled = false;
+};
+
 // ═══ تصفير العدّادات (عدّاد العمليات العلوي + عدّاد الصرف في المحافظ) ═══
 // ما يمس سجل العمليات — التواريخ محفوظة للتقارير
 async function loadCounters() {
@@ -883,6 +933,7 @@ async function loadCounters() {
       await setDoc(doc(db, "settings", "counters"), { txBaseline: 0, v2: true });
     } else {
       txBaseline = d.txBaseline || 0;
+      cycleStart = d.cycleStart?.toDate ? d.cycleStart.toDate() : null;
     }
   }
   renderStrip();
@@ -905,8 +956,9 @@ $("resetCountersBtn").onclick = async () => {
     WALLETS.forEach(w => batch.update(doc(db, "wallets", w.id), { spent: 0 }));
     await batch.commit();
     // ٢) صفّر العدّاد العلوي عبر تخزين خط الأساس = عدد العمليات الحالي
-    txBaseline = TX.filter(t => t.status === "done").length;
-    await setDoc(doc(db, "settings", "counters"), { txBaseline, v2: true, updatedAt: serverTimestamp() });
+    cycleStart = new Date();
+    txBaseline = 0;
+    await setDoc(doc(db, "settings", "counters"), { cycleStart: Timestamp.fromDate(cycleStart), txBaseline: 0, v2: true, updatedAt: serverTimestamp() });
     renderStrip();
     $("resetCountersBtn").textContent = "تم التصفير ✓";
     setTimeout(() => { $("resetCountersBtn").textContent = "صفّر عدّادات الصرف"; }, 2500);
