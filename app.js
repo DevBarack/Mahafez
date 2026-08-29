@@ -321,8 +321,15 @@ function renderTx() {
   // لو المستخدم يكتب في خانة اسم، لا تعيد الرسم الحين (حماية كتابته من الضياع)
   const active = document.activeElement;
   if (active && active.dataset && active.dataset.mname) return;
-  const done = TX.filter(t => t.status === "done");
-  $("txList").innerHTML = done.length ? done.map(t => `
+  const filterW = $("txFilter") ? $("txFilter").value : "";
+  const done = TX.filter(t => t.status === "done" && (!filterW || t.wallet === filterW));
+  // سطر ملخص عند التصفية: العدد والمجموع
+  let summary = "";
+  if (filterW && done.length) {
+    const tot = done.reduce((s, t) => s + (t.amount || 0), 0);
+    summary = `<div class="filter-sum num">${done.length} عملية · المجموع ${sar(tot)}</div>`;
+  }
+  $("txList").innerHTML = done.length ? summary + done.map(t => `
     <div class="tx">
       <div class="l">
         <input class="m m-edit num-off" data-mname="${t.id}" value="${esc(t.merchant || "")}" placeholder="اسم العملية" />
@@ -335,7 +342,7 @@ function renderTx() {
         <button class="undo" data-undo="${t.id}">تراجع</button>
         <button class="del" data-del="${t.id}">حذف</button>
       </div>
-    </div>`).join("") : `<div class="empty">ما فيه عمليات بعد</div>`;
+    </div>`).join("") : `<div class="empty">${filterW ? "ما فيه عمليات في هذي المحفظة" : "ما فيه عمليات بعد"}</div>`;
   // تعديل اسم العملية: يحفظ عند الخروج من الخانة أو Enter
   $("txList").querySelectorAll("[data-mname]").forEach(inp => {
     const save = async () => {
@@ -754,7 +761,15 @@ function renderWalletChart() {
 
 function fillPickers() {
   $("aWallet").innerHTML = WALLETS.map(w => `<option value="${w.id}">${w.emoji || ""} ${w.name}</option>`).join("");
+  // فلتر العمليات: عبّي الخيارات مع الحفاظ على الاختيار الحالي
+  if ($("txFilter")) {
+    const cur = $("txFilter").value;
+    $("txFilter").innerHTML = `<option value="">📂 كل المحافظ</option>` +
+      WALLETS.map(w => `<option value="${w.id}">${w.emoji || ""} ${w.name}</option>`).join("");
+    if ([...$("txFilter").options].some(o => o.value === cur)) $("txFilter").value = cur;
+  }
 }
+if ($("txFilter")) $("txFilter").onchange = () => renderTx();
 
 // ═══ ADD manual ═══
 $("addBtn").onclick = async () => {
