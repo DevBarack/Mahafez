@@ -55,7 +55,7 @@ function listen() {
     WALLETS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderWallets(); renderReview(); fillPickers(); renderReportAll();
   }));
-  unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(150)), snap => {
+  unsub.push(onSnapshot(query(collection(db, "transactions"), orderBy("createdAt", "desc"), limit(1000)), snap => {
     TX = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     renderReview(); renderUnparsed(); renderTx(); renderWallets(); renderReportAll(); renderStrip();
     autoSort();
@@ -442,7 +442,7 @@ function setChip(id) {
   if (id) $(id)?.classList.add("on");
 }
 function syncDateInputs() {
-  const f = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "";
+  const f = (d) => (d && d.getFullYear() > 2000) ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : "";
   if ($("repFrom")) $("repFrom").value = f(repFrom);
   if ($("repTo")) $("repTo").value = f(repTo);
 }
@@ -453,6 +453,10 @@ if ($("chipMonth")) $("chipMonth").onclick = () => {
   const now = new Date();
   repFrom = new Date(now.getFullYear(), now.getMonth(), 1); repTo = now;
   syncDateInputs(); setChip("chipMonth"); renderReportAll();
+};
+if ($("chipAll")) $("chipAll").onclick = () => {
+  repFrom = new Date(2000, 0, 1); repTo = null; // كل التاريخ
+  syncDateInputs(); setChip("chipAll"); renderReportAll();
 };
 if ($("chip7")) $("chip7").onclick = () => {
   const now = new Date();
