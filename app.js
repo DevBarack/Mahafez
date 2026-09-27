@@ -902,6 +902,38 @@ if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
   setTimeout(() => { $("retryParseBtn").textContent = "🔄 أعد قراءتها بالمحرّك المحدّث"; }, 5000);
 };
 
+// ═══ لصق رسائل البنك: تدخل كـraw ويقرأها نفس محرك الأتمتة ═══
+if ($("pasteBtn")) $("pasteBtn").onclick = async () => {
+  $("pasteMsg").textContent = "";
+  const text = ($("pasteSms").value || "").trim();
+  if (!text) { $("pasteMsg").style.color = "var(--red)"; $("pasteMsg").textContent = "الصق الرسالة أول"; return; }
+  // التاريخ: المختار (12 ظهراً) أو الآن — ونرفض المستقبل
+  let when = new Date();
+  if ($("pasteDate").value) {
+    when = new Date($("pasteDate").value + "T12:00:00");
+    if (isNaN(when) || when > new Date()) { $("pasteMsg").style.color = "var(--red)"; $("pasteMsg").textContent = "التاريخ غير صالح"; return; }
+  }
+  // أكثر من رسالة: مفصولة بسطر فاضي
+  const parts = text.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+  $("pasteBtn").disabled = true; $("pasteBtn").textContent = "…";
+  let ok = 0, skipped = 0, bad = 0;
+  for (const part of parts) {
+    const parsed = parseSMS(part);
+    if (parsed?.skip) { skipped++; continue; }        // استرجاع — مو مصروف
+    if (!parsed) { bad++; }                            // ما انقرأت — ندخلها raw وتطلع في "ما قدر يقرأها"
+    await addDoc(collection(db, "transactions"), {
+      raw: part, status: "raw", source: "paste",
+      createdAt: Timestamp.fromDate(when)
+    });
+    ok++;
+  }
+  $("pasteBtn").disabled = false; $("pasteBtn").textContent = "اقرأ وأضف للمراجعة";
+  $("pasteMsg").style.color = "var(--teal)";
+  $("pasteMsg").textContent = `أضفت ${ok}` + (bad ? ` (منها ${bad} بتحتاج إدخال يدوي)` : "") + (skipped ? ` · تجاهلت ${skipped} استرجاع` : "") + " ✓";
+  if (ok) $("pasteSms").value = "";
+  setTimeout(() => { $("pasteMsg").textContent = ""; }, 5000);
+};
+
 // ═══ بدء دورة جديدة من تاريخ محدد: يطبّق التوزيع + يصفّر بالتاريخ ═══
 let cycleArmed = false, cycleTimer = null;
 if ($("newCycleBtn")) $("newCycleBtn").onclick = async () => {

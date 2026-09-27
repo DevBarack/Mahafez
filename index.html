@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="./styles.css?v=31">
+<link rel="stylesheet" href="./styles.css?v=32">
 </head>
 <body>
 
@@ -147,6 +147,13 @@
     <div class="field"><label>المحفظة</label><select id="aWallet"></select></div>
     <div class="field"><label>التاريخ <span class="hint">اتركه فاضي = اليوم</span></label><input id="aDate" type="date"></div>
     <button class="primary" id="addBtn">سجّل العملية</button>
+
+    <h2 style="margin-top:22px">📋 لصق رسالة البنك</h2>
+    <div class="note">انسخ رسالة الشراء من تطبيق الرسائل والصقها هنا — القارئ يقرأها بنفس محرك الأتمتة. تقدر تلصق أكثر من رسالة مفصولة بسطر فاضي.</div>
+    <div class="field"><textarea id="pasteSms" rows="4" placeholder="شراء POS-ApplePay بـ SAR ..."></textarea></div>
+    <div class="field"><label>تاريخ العمليات <span class="hint">اتركه فاضي = اليوم</span></label><input id="pasteDate" type="date"></div>
+    <button class="ghost" id="pasteBtn">اقرأ وأضف للمراجعة</button>
+    <div class="err" id="pasteMsg"></div>
     <div class="err" id="addErr"></div>
 
     <h2>الشهر الجديد</h2>
@@ -179,6 +186,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=31"></script>
+<script type="module" src="./app.js?v=32"></script>
 </body>
 </html>

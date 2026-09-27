@@ -403,3 +403,6 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.7) sepia(.3
 
 /* ملخص الفلترة */
 .filter-sum{font-size:.78rem;color:var(--teal);font-weight:600;padding:8px 4px;border-bottom:1px solid var(--line)}
+
+/* لصق الرسائل */
+#pasteSms{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--text);padding:12px;font-family:inherit;font-size:.8rem;box-sizing:border-box;resize:vertical}
