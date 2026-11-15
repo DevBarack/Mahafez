@@ -169,6 +169,73 @@ async function autoSort() {
 }
 const norm = s => (s || "").toString().trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 90);
 
+// ═══ التصنيف الذكي: مطابقة تقريبية ضد ذاكرة المتاجر + خصم دفعي ═══
+// كلمات عامة ما تنفع للتمييز
+const GENERIC = new Set(["co","com","est","inc","llc","sa","ksa","trading","company","markets","market","store","stores","shop","for","and","the","of","ltd"]);
+function sigTokens(s) {
+  // نسقط الأرقام وأكواد الفروع (حرف-حرفين + أرقام زي s175) والكلمات العامة
+  return norm(s).split("-").filter(t => t.length >= 3 && !/^\p{L}{0,2}\d+$/u.test(t) && !GENERIC.has(t));
+}
+// هل الاسمان لنفس المتجر؟ (تجاهل أرقام الفروع والكلمات العامة)
+function merchantsMatch(a, b) {
+  const na = norm(a), nb = norm(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const ta = sigTokens(a), tb = sigTokens(b);
+  if (!ta.length || !tb.length) return false;
+  // تطابق أول كلمة مميزة + تقاطع كلمة طولها 4+
+  const shared = ta.filter(t => t.length >= 4 && tb.includes(t));
+  if (shared.length && ta[0] === tb[0]) return true;
+  // أو أحدهما يحتوي الآخر (أسماء قصيرة مميزة)
+  if (shared.length >= 2) return true;
+  const ja = ta.join("-"), jb = tb.join("-");
+  if (ja.length >= 5 && jb.length >= 5 && (ja.includes(jb) || jb.includes(ja))) return true;
+  return false;
+}
+
+if ($("smartBtn")) $("smartBtn").onclick = async () => {
+  const pend = TX.filter(t => t.status === "pending");
+  if (!pend.length) return;
+  $("smartBtn").disabled = true; $("smartBtn").textContent = "يصنّف…";
+  $("smartMsg").textContent = "";
+  try {
+    // ١) حمّل ذاكرة المتاجر كاملة مرة وحدة
+    const memSnap = await getDocs(collection(db, "merchants"));
+    const MEM = memSnap.docs.map(d => d.data()).filter(m => m.merchant && m.wallet);
+    // ٢) طابق كل معلّقة: نقبل بس لو كل المطابقات تشير لنفس المحفظة (الغموض = مراجعة يدوية)
+    const toAssign = []; // {tx, wallet}
+    for (const t of pend) {
+      if (!t.merchant) continue;
+      const hits = MEM.filter(m => merchantsMatch(t.merchant, m.merchant));
+      const wallets = [...new Set(hits.map(h => h.wallet))].filter(w => WALLETS.some(x => x.id === w));
+      if (wallets.length === 1) toAssign.push({ tx: t, wallet: wallets[0] });
+    }
+    // ٣) خصم دفعي: جمّع المبالغ لكل محفظة ثم اكتب دفعات (أسرع بكثير من فردي)
+    const perWallet = {};
+    toAssign.forEach(({ tx, wallet }) => { perWallet[wallet] = (perWallet[wallet] || 0) + (tx.amount || 0); });
+    for (let i = 0; i < toAssign.length; i += 400) {
+      const chunk = toAssign.slice(i, i + 400);
+      const batch = writeBatch(db);
+      chunk.forEach(({ tx, wallet }) => {
+        const w = WALLETS.find(x => x.id === wallet);
+        batch.update(doc(db, "transactions", tx.id), { wallet, walletName: w.name, status: "done" });
+      });
+      if (i === 0) Object.entries(perWallet).forEach(([wid, total]) => {
+        batch.update(doc(db, "wallets", wid), { balance: increment(-total), spent: increment(total) });
+      });
+      await batch.commit();
+    }
+    const left = pend.length - toAssign.length;
+    $("smartMsg").style.color = "var(--teal)";
+    $("smartMsg").textContent = `صنّفت ${toAssign.length} تلقائياً ✓` + (left ? ` — بقي ${left} ما أعرف متاجرها، صنّفها يدوي (وبتعلّمها للجاي)` : " — خلصت كلها! 🎉");
+  } catch (e) {
+    $("smartMsg").style.color = "var(--red)";
+    $("smartMsg").textContent = "صار خطأ: " + String(e?.message || e).slice(0, 60);
+  }
+  $("smartBtn").disabled = false; $("smartBtn").textContent = "🪄 صنّف تلقائياً من تصنيفاتك السابقة";
+  setTimeout(() => { $("smartMsg").textContent = ""; }, 12000);
+};
+
 // ═══ ASSIGN a transaction to a wallet (and deduct) ═══
 async function assign(tx, walletId, learn = true) {
   const w = WALLETS.find(x => x.id === walletId);
@@ -788,9 +855,11 @@ $("addBtn").onclick = async () => {
   // تاريخ مخصص → نخزّنه (12 ظهراً محلياً عشان ما ينزاح ليوم ثاني بفروقات التوقيت)
   let createdAt = serverTimestamp();
   if (dateStr) {
-    const d = new Date(dateStr + "T12:00:00");
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const d = dateStr === todayStr ? now : new Date(dateStr + "T12:00:00");
     if (isNaN(d)) { $("addErr").textContent = "التاريخ غير صحيح"; return; }
-    if (d > new Date()) { $("addErr").textContent = "التاريخ في المستقبل!"; return; }
+    if (dateStr > todayStr) { $("addErr").textContent = "التاريخ في المستقبل!"; return; }
     createdAt = Timestamp.fromDate(d);
   }
   const w = WALLETS.find(x => x.id === wid);
@@ -902,6 +971,11 @@ if ($("retryParseBtn")) $("retryParseBtn").onclick = async () => {
   setTimeout(() => { $("retryParseBtn").textContent = "🔄 أعد قراءتها بالمحرّك المحدّث"; }, 5000);
 };
 
+// إصلاح iOS: افتح منتقي التاريخ بأي ضغطة على أي خانة تاريخ
+document.querySelectorAll('input[type=date]').forEach(inp => {
+  inp.addEventListener("click", () => { try { inp.showPicker && inp.showPicker(); } catch (e) {} });
+});
+
 // ═══ لصق رسائل البنك: تدخل كـraw ويقرأها نفس محرك الأتمتة ═══
 if ($("pasteBtn")) $("pasteBtn").onclick = async () => {
   $("pasteMsg").textContent = "";
@@ -910,8 +984,11 @@ if ($("pasteBtn")) $("pasteBtn").onclick = async () => {
   // التاريخ: المختار (12 ظهراً) أو الآن — ونرفض المستقبل
   let when = new Date();
   if ($("pasteDate").value) {
-    when = new Date($("pasteDate").value + "T12:00:00");
-    if (isNaN(when) || when > new Date()) { $("pasteMsg").style.color = "var(--red)"; $("pasteMsg").textContent = "التاريخ غير صالح"; return; }
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const ds = $("pasteDate").value;
+    when = ds === todayStr ? now : new Date(ds + "T12:00:00");
+    if (isNaN(when) || ds > todayStr) { $("pasteMsg").style.color = "var(--red)"; $("pasteMsg").textContent = "التاريخ غير صالح"; return; }
   }
   // أكثر من رسالة: مفصولة بسطر فاضي
   const parts = text.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
